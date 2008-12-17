@@ -5669,6 +5669,70 @@ uint32 ObjectMgr::GeneratePetNumber()
     return ++m_hiPetNumber;
 }
 
+// Loads the jail conf out of the database
+void ObjectMgr::LoadJailConf(void)
+{
+    CharacterDatabase.BeginTransaction();
+    QueryResult *result = CharacterDatabase.PQuery("SELECT * FROM `jail_conf`");
+    CharacterDatabase.CommitTransaction();
+
+    if (!result)
+    {
+        sLog.outError(GetMangosStringForDBCLocale(LANG_JAIL_CONF_ERR1));
+        sLog.outError(GetMangosStringForDBCLocale(LANG_JAIL_CONF_ERR2));
+
+        m_jailconf_max_jails = 3;
+        m_jailconf_max_duration = 672;
+        m_jailconf_min_reason = 25;
+        m_jailconf_warn_player = 1;
+
+        m_jailconf_ally_x = -8673.43;
+        m_jailconf_ally_y = 631.795;
+        m_jailconf_ally_z = 96.9406;
+        m_jailconf_ally_o = 2.1785;
+        m_jailconf_ally_m = 0;
+
+        m_jailconf_horde_x = 2179.85;
+        m_jailconf_horde_y = -4763.96;
+        m_jailconf_horde_z = 54.911;
+        m_jailconf_horde_o = 4.44216;
+        m_jailconf_horde_m = 1;
+
+        m_jailconf_ban = 0;
+        m_jailconf_radius = 10;
+
+        return;
+    }
+
+    Field *fields = result->Fetch();
+
+    m_jailconf_max_jails = fields[0].GetUInt32();
+    m_jailconf_max_duration = fields[1].GetUInt32();
+    m_jailconf_min_reason = fields[2].GetUInt32();
+    m_jailconf_warn_player = fields[3].GetUInt32();
+
+    m_jailconf_ally_x = fields[4].GetFloat();
+    m_jailconf_ally_y = fields[5].GetFloat();
+    m_jailconf_ally_z = fields[6].GetFloat();
+    m_jailconf_ally_o = fields[7].GetFloat();
+    m_jailconf_ally_m = fields[8].GetUInt32();
+
+    m_jailconf_horde_x = fields[9].GetFloat();
+    m_jailconf_horde_y = fields[10].GetFloat();
+    m_jailconf_horde_z = fields[11].GetFloat();
+    m_jailconf_horde_o = fields[12].GetFloat();
+    m_jailconf_horde_m = fields[13].GetUInt32();
+
+    m_jailconf_ban = fields[14].GetUInt32();
+    m_jailconf_radius = fields[15].GetUInt32();
+
+    delete result;
+
+    sLog.outString("");
+    sLog.outString(GetMangosStringForDBCLocale(LANG_JAIL_CONF_LOADED));
+    sLog.outString("");
+}
+
 void ObjectMgr::LoadCorpses()
 {
     uint32 count = 0;

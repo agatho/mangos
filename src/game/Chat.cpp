@@ -498,6 +498,12 @@ ChatCommand * ChatHandler::getCommandTable()
         { "reset",          SEC_ADMINISTRATOR,  false, NULL,                                           "", resetCommandTable },
         { "instance",       SEC_ADMINISTRATOR,  true,  NULL,                                           "", instanceCommandTable },
         { "server",         SEC_ADMINISTRATOR,  true,  NULL,                                           "", serverCommandTable },
+		
+		// Jail by WarHead
+        { "jail",           SEC_MODERATOR,      true, &ChatHandler::HandleJailCommand,                 "", NULL },
+        { "jailinfo",       SEC_PLAYER,         true, &ChatHandler::HandleJailInfoCommand,             "", NULL },
+        { "unjail",         SEC_MODERATOR,      true, &ChatHandler::HandleUnJailCommand,               "", NULL },
+        { "jailreload",     SEC_ADMINISTRATOR,  true, &ChatHandler::HandleJailReloadCommand,           "", NULL },
 
         { "aura",           SEC_ADMINISTRATOR,  false, &ChatHandler::HandleAuraCommand,                "", NULL },
         { "unaura",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleUnAuraCommand,              "", NULL },

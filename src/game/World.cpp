@@ -1239,6 +1239,9 @@ void World::SetInitialWorldSettings()
     sLog.outString( "Returning old mails..." );
     objmgr.ReturnOrDeleteOldMails(false);
 
+    // Loads the jail conf out of the database
+    objmgr.LoadJailConf();
+
     ///- Load and initialize scripts
     sLog.outString( "Loading Scripts..." );
     objmgr.LoadQuestStartScripts();                         // must be after load Creature/Gameobject(Template/Data) and QuestTemplate
