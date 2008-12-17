@@ -101,11 +101,13 @@ void WorldSession::HandleBattleGroundJoinOpcode( WorldPacket & recv_data )
         return;
 
     Creature *unit = ObjectAccessor::GetCreature(*_player, guid);
-    if(!unit)
+    
+	/* Check needed to be removed for enterbg command
+	 if(!unit)
         return;
 
     if(!unit->isBattleMaster())                             // it's not battlemaster
-        return;
+        return;  */
 
     // get bg instance or bg template if instance not found
     BattleGround * bg = 0;

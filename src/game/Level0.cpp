@@ -32,6 +32,7 @@
 #include "revision.h"
 #include "revision_nr.h"
 #include "Util.h"
+#include "BattleGround.h"
 
 bool ChatHandler::HandleHelpCommand(const char* args)
 {
@@ -263,3 +264,48 @@ bool ChatHandler::HandleServerMotdCommand(const char* /*args*/)
     PSendSysMessage(LANG_MOTD_CURRENT, sWorld.GetMotd());
     return true;
 }
+
+bool ChatHandler::HandleEnterBGCommand(const char *args)
+{
+    if (!*args)
+        return false;
+
+    int bgID;
+    if(strcmp(args, "ws") == 0)
+        bgID = BATTLEGROUND_WS;
+    else if(strcmp(args, "ab") == 0)
+        bgID = BATTLEGROUND_AB;
+    else if(strcmp(args, "av") == 0)
+        bgID = BATTLEGROUND_AV;
+    else if(strcmp(args, "ey") == 0)
+        bgID = BATTLEGROUND_EY;
+    else
+        return false;
+
+    Player* _player = m_session->GetPlayer();
+    uint32 mapID = _player->GetMapId();
+    if(mapID != 0 && mapID != 1 && mapID != 530)
+    {
+        m_session->SendNotification("You should leave the Instance first.");
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    BattlemasterListEntry const* bl = sBattlemasterListStore.LookupEntry(bgID);
+    if(!bl)
+        return false;
+
+    uint32 level =_player->getLevel();
+    if(level < bl->minlvl || level > bl->maxlvl)
+    {
+        m_session->SendNotification("You don't meet Battleground level requirements.");
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    WorldPacket data;
+    sBattleGroundMgr.BuildBattleGroundListPacket(&data, _player->GetGUID(), _player, bgID);
+    m_session->SendPacket( &data );
+    return true;
+}
+

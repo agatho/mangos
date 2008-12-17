@@ -566,6 +566,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "sendmessage",    SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleSendMessageCommand,         "", NULL },
         { "repairitems",    SEC_GAMEMASTER,     false, &ChatHandler::HandleRepairitemsCommand,         "", NULL },
         { "waterwalk",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWaterwalkCommand,           "", NULL },
+		{ "enterbg",        SEC_PLAYER,         true,  &ChatHandler::HandleEnterBGCommand,             "", NULL },
 
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
