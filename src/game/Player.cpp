@@ -1448,6 +1448,19 @@ void Player::BuildEnumData( QueryResult * result, WorldPacket * p_data )
     *p_data << (uint32)0;                                   // enchant?
 }
 
+bool Player::isVIP(uint64 guid)
+{
+    bool VIP = false;
+    uint32 account = objmgr.GetPlayerAccountIdByGUID(guid);
+    QueryResult *result = loginDatabase.PQuery("SELECT * FROM `vips` WHERE `id`='%u'", account);
+    if(!result)
+        VIP = false;
+    else
+        VIP = true;
+
+    return VIP;
+}
+
 bool Player::ToggleAFK()
 {
     ToggleFlag(PLAYER_FLAGS, PLAYER_FLAGS_AFK);
