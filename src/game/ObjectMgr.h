@@ -242,6 +242,8 @@ typedef std::list<GossipOption> CacheNpcOptionList;
 typedef UNORDERED_MAP<uint32, VendorItemData> CacheVendorItemMap;
 typedef UNORDERED_MAP<uint32, TrainerSpellData> CacheTrainerSpellMap;
 
+typedef std::list<const AchievementCriteriaEntry*> AchievementCriteriaEntryList;
+
 enum SkillRangeType
 {
     SKILL_RANGE_LANGUAGE,                                   // 300..300
@@ -565,6 +567,9 @@ class ObjectMgr
         void LoadVendors();
         void LoadTrainerSpell();
 		
+		void LoadCompletedAchievements();
+
+		
         // Loads the jail conf out of the database
         void LoadJailConf(void);
  
@@ -585,6 +590,9 @@ class ObjectMgr
         uint32 m_jailconf_horde_m;
         uint32 m_jailconf_ban;          // Ban acc if max. jailtimes is reached?
         uint32 m_jailconf_radius;       // Radius in which a jailed char can walk   
+
+
+
 
         std::string GeneratePetName(uint32 entry);
         uint32 GetBaseXP(uint32 level);
@@ -789,6 +797,9 @@ class ObjectMgr
         void AddVendorItem(uint32 entry,uint32 item, uint32 maxcount, uint32 incrtime, uint32 ExtendedCost);
         bool RemoveVendorItem(uint32 entry,uint32 item);
         bool IsVendorItemValid( uint32 vendor_entry, uint32 item, uint32 maxcount, uint32 ptime, uint32 ExtendedCost, Player* pl = NULL, std::set<uint32>* skip_vendors = NULL ) const;
+        void LoadAchievementCriteriaList();
+        AchievementCriteriaEntryList const& GetAchievementCriteriaByType(AchievementCriteriaTypes type);
+        std::set<uint32> allCompletedAchievements;
 
         void LoadScriptNames();
         ScriptNameMap &GetScriptNames() { return m_scriptNames; }
@@ -808,6 +819,7 @@ class ObjectMgr
         uint32 m_hiCharGuid;
         uint32 m_hiCreatureGuid;
         uint32 m_hiPetGuid;
+        uint32 m_hiVehicleGuid;
         uint32 m_hiItemGuid;
         uint32 m_hiGoGuid;
         uint32 m_hiDoGuid;
@@ -915,6 +927,9 @@ class ObjectMgr
         CacheNpcTextIdMap m_mCacheNpcTextIdMap;
         CacheVendorItemMap m_mCacheVendorItemMap;
         CacheTrainerSpellMap m_mCacheTrainerSpellMap;
+
+        // store achievement criterias by type to speed up lookup
+        AchievementCriteriaEntryList m_AchievementCriteriasByType[ACHIEVEMENT_CRITERIA_TYPE_TOTAL];
 };
 
 #define objmgr MaNGOS::Singleton<ObjectMgr>::Instance()

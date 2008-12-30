@@ -77,6 +77,7 @@ class ChatHandler
 
         virtual bool isAvailable(ChatCommand const& cmd) const;
         virtual bool needReportToTarget(Player* chr) const;
+        bool HasLowerSecurity(Player* target, uint64 guid);
 
         void SendGlobalSysMessage(const char *str);
 
@@ -156,6 +157,7 @@ class ChatHandler
         bool HandleModifyHPCommand(const char* args);
         bool HandleModifyManaCommand(const char* args);
         bool HandleModifyRageCommand(const char* args);
+        bool HandleModifyRunicPowerCommand(const char* args);
         bool HandleModifyEnergyCommand(const char* args);
         bool HandleModifyMoneyCommand(const char* args);
         bool HandleModifyASpeedCommand(const char* args);
@@ -195,7 +197,6 @@ class ChatHandler
         bool HandleNpcWhisperCommand(const char* args);
         bool HandleNpcYellCommand(const char* args);
 
-        bool HandleReloadCommand(const char* args);
         bool HandleReloadAllCommand(const char* args);
         bool HandleReloadAllAreaCommand(const char* args);
         bool HandleReloadAllItemCommand(const char* args);
@@ -225,6 +226,7 @@ class ChatHandler
         bool HandleReloadLootTemplatesFishingCommand(const char* args);
         bool HandleReloadLootTemplatesGameobjectCommand(const char* args);
         bool HandleReloadLootTemplatesItemCommand(const char* args);
+        bool HandleReloadLootTemplatesMillingCommand(const char* args);
         bool HandleReloadLootTemplatesPickpocketingCommand(const char* args);
         bool HandleReloadLootTemplatesProspectingCommand(const char* args);
         bool HandleReloadLootTemplatesReferenceCommand(const char* args);
@@ -405,6 +407,7 @@ class ChatHandler
         bool HandleSendChannelNotifyCommand(const char* args);
         bool HandleSendChatMsgCommand(const char* args);
         bool HandleRenameCommand(const char * args);
+        bool HandleCustomizeCommand(const char * args);
         bool HandleLoadPDumpCommand(const char *args);
         bool HandleWritePDumpCommand(const char *args);
         bool HandleCastCommand(const char *args);
@@ -437,6 +440,7 @@ class ChatHandler
         bool HandleGetItemState(const char * args);
         bool HandleGetLootRecipient(const char * args);
         bool HandleDebugArenaCommand(const char * args);
+        bool HandleSpawnVehicle(const char * args);
 
         Player*   getSelectedPlayer();
         Creature* getSelectedCreature();
