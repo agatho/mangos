@@ -668,6 +668,10 @@ bool ChatHandler::HandleModifyRepCommand(const char * args)
         return false;
     }
 
+    // check online security
+    if (HasLowerSecurity(target, 0))
+        return false;
+
     char* factionTxt = extractKeyFromLink((char*)args,"Hfaction");
     if(!factionTxt)
         return false;
@@ -949,7 +953,7 @@ bool ChatHandler::HandleNpcDeleteCommand(const char* args)
     else
         unit = getSelectedCreature();
 
-    if(!unit || unit->isPet() || unit->isTotem())
+    if(!unit || unit->isPet() || unit->isTotem() || unit->isVehicle())
     {
         SendSysMessage(LANG_SELECT_CREATURE);
         SetSentErrorMessage(true);
@@ -1062,8 +1066,8 @@ bool ChatHandler::HandleTurnObjectCommand(const char* args)
     obj->Relocate(obj->GetPositionX(), obj->GetPositionY(), obj->GetPositionZ(), o);
 
     obj->SetFloatValue(GAMEOBJECT_FACING, o);
-    obj->SetFloatValue(GAMEOBJECT_ROTATION+2, rot2);
-    obj->SetFloatValue(GAMEOBJECT_ROTATION+3, rot3);
+    obj->SetFloatValue(GAMEOBJECT_PARENTROTATION+2, rot2);
+    obj->SetFloatValue(GAMEOBJECT_PARENTROTATION+3, rot3);
 
     map->Add(obj);
 
@@ -1238,6 +1242,11 @@ bool ChatHandler::HandleDeMorphCommand(const char* /*args*/)
     Unit *target = getSelectedUnit();
     if(!target)
         target = m_session->GetPlayer();
+
+
+    // check online security
+    else if (target->GetTypeId() == TYPEID_PLAYER && HasLowerSecurity((Player*)target, 0))
+        return false;
 
     target->DeMorph();
 
@@ -1632,6 +1641,10 @@ bool ChatHandler::HandleMorphCommand(const char* args)
     if(!target)
         target = m_session->GetPlayer();
 
+    // check online security
+    else if (target->GetTypeId() == TYPEID_PLAYER && HasLowerSecurity((Player*)target, 0))
+        return false;
+
     target->SetDisplayId(display_id);
 
     return true;
@@ -1700,6 +1713,10 @@ bool ChatHandler::HandleKickPlayerCommand(const char *args)
             return false;
         }
 
+        // check online security
+        if (HasLowerSecurity(player, 0))
+            return false;
+
         player->GetSession()->KickPlayer();
     }
     else
@@ -1718,6 +1735,11 @@ bool ChatHandler::HandleKickPlayerCommand(const char *args)
             SetSentErrorMessage(true);
             return false;
         }
+
+        // check online security
+	Player* player = ObjectAccessor::Instance().FindPlayerByName(name.c_str());
+        if (player && HasLowerSecurity(player, 0))
+            return false;
 
         if(sWorld.KickPlayer(name))
         {
@@ -1789,6 +1811,10 @@ bool ChatHandler::HandlePInfoCommand(const char* args)
     // get additional information from Player object
     if(target)
     {
+        // check online security
+        if (HasLowerSecurity(target, 0))
+            return false;
+
         targetGUID = target->GetGUID();
         name = target->GetName();                           // re-read for case getSelectedPlayer() target
         accId = target->GetSession()->GetAccountId();
@@ -1800,6 +1826,10 @@ bool ChatHandler::HandlePInfoCommand(const char* args)
     // get additional information from DB
     else
     {
+        // check offline security
+        if (HasLowerSecurity(NULL, targetGUID))
+            return false;
+
         //                                                     0
         QueryResult *result = CharacterDatabase.PQuery("SELECT totaltime FROM characters WHERE guid = '%u'", GUID_LOPART(targetGUID));
         if (!result)
@@ -3343,14 +3373,75 @@ bool ChatHandler::HandleRenameCommand(const char* args)
 
     if(target)
     {
+        // check online security
+        if (HasLowerSecurity(target, 0))
+            return false;
+
         PSendSysMessage(LANG_RENAME_PLAYER, target->GetName());
         target->SetAtLoginFlag(AT_LOGIN_RENAME);
         CharacterDatabase.PExecute("UPDATE characters SET at_login = at_login | '1' WHERE guid = '%u'", target->GetGUIDLow());
     }
     else
     {
+        // check offline security
+        if (HasLowerSecurity(NULL, targetGUID))
+            return false;
+
         PSendSysMessage(LANG_RENAME_PLAYER_GUID, oldname.c_str(), GUID_LOPART(targetGUID));
         CharacterDatabase.PExecute("UPDATE characters SET at_login = at_login | '1' WHERE guid = '%u'", GUID_LOPART(targetGUID));
+    }
+
+    return true;
+}
+
+// customize characters
+bool ChatHandler::HandleCustomizeCommand(const char* args)
+{
+    Player* target = NULL;
+    uint64 targetGUID = 0;
+    std::string oldname;
+
+    char* px = strtok((char*)args, " ");
+
+    if(px)
+    {
+        oldname = px;
+
+        if(!normalizePlayerName(oldname))
+        {
+            SendSysMessage(LANG_PLAYER_NOT_FOUND);
+            SetSentErrorMessage(true);
+            return false;
+        }
+
+        target = objmgr.GetPlayer(oldname.c_str());
+
+        if (!target)
+            targetGUID = objmgr.GetPlayerGUIDByName(oldname);
+    }
+
+    if(!target && !targetGUID)
+    {
+        target = getSelectedPlayer();
+    }
+
+    if(!target && !targetGUID)
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    if(target)
+    {
+        PSendSysMessage(LANG_CUSTOMIZE_PLAYER, target->GetName());
+        target->SetAtLoginFlag(AT_LOGIN_CUSTOMIZE);
+        CharacterDatabase.PExecute("UPDATE characters SET at_login = at_login | '8' WHERE guid = '%u'", target->GetGUIDLow());
+    }
+    else
+    {
+        PSendSysMessage(LANG_CUSTOMIZE_PLAYER_GUID, oldname.c_str(), GUID_LOPART(targetGUID));
+        CharacterDatabase.PExecute("UPDATE characters SET at_login = at_login | '8' WHERE guid = '%u'", GUID_LOPART(targetGUID));
     }
 
     return true;
@@ -3464,6 +3555,10 @@ bool ChatHandler::HandleAddHonorCommand(const char* args)
         return false;
     }
 
+    // check online security
+    if (HasLowerSecurity(target, 0))
+        return false;
+
     uint32 amount = (uint32)atoi(args);
     target->RewardHonor(NULL, 1, amount);
     return true;
@@ -3479,6 +3574,10 @@ bool ChatHandler::HandleHonorAddKillCommand(const char* /*args*/)
         return false;
     }
 
+    // check online security
+    if (target->GetTypeId() == TYPEID_PLAYER && HasLowerSecurity((Player*)target, 0))
+        return false;
+
     m_session->GetPlayer()->RewardHonor(target, 1);
     return true;
 }
@@ -3492,6 +3591,10 @@ bool ChatHandler::HandleUpdateHonorFieldsCommand(const char* /*args*/)
         SetSentErrorMessage(true);
         return false;
     }
+
+    // check online security
+    if (HasLowerSecurity(target, 0))
+        return false;
 
     target->UpdateHonorFields();
     return true;
@@ -3735,6 +3838,10 @@ bool ChatHandler::HandleCombatStopCommand(const char* args)
             player = m_session->GetPlayer();
     }
 
+    // check online security
+    if (HasLowerSecurity(player, 0))
+        return false;
+
     player->CombatStop();
     player->getHostilRefManager().deleteReferences();
     return true;
@@ -3972,6 +4079,10 @@ bool ChatHandler::HandleRepairitemsCommand(const char* /*args*/)
         return false;
     }
 
+    // check online security
+    if (HasLowerSecurity(target, 0))
+        return false;
+
     // Repair items
     target->DurabilityRepairAll(false, 0, false);
 
@@ -3994,6 +4105,10 @@ bool ChatHandler::HandleWaterwalkCommand(const char* args)
         SetSentErrorMessage(true);
         return false;
     }
+
+    // check online security
+    if (HasLowerSecurity(player, 0))
+        return false;
 
     if (strncmp(args, "on", 3) == 0)
         player->SetMovement(MOVE_WATER_WALK);               // ON
@@ -4109,17 +4224,20 @@ bool ChatHandler::HandleNpcTameCommand(const char* /*args*/)
     player->GetClosePoint (x,y,z,creatureTarget->GetObjectSize (),CONTACT_DISTANCE);
     pet->Relocate (x,y,z,M_PI-player->GetOrientation ());
 
-    // set pet to defensive mode by default (some classes can't control contolled pets in fact).
+    // set pet to defensive mode by default (some classes can't control controlled pets in fact).
     pet->GetCharmInfo()->SetReactState(REACT_DEFENSIVE);
 
+    // calculate proper level
+    uint32 level = (creatureTarget->getLevel() < (player->getLevel() - 5)) ? (player->getLevel() - 5) : creatureTarget->getLevel();
+
     // prepare visual effect for levelup
-    pet->SetUInt32Value(UNIT_FIELD_LEVEL,creatureTarget->getLevel()-1);
+    pet->SetUInt32Value(UNIT_FIELD_LEVEL, level - 1);
 
     // add to world
     pet->GetMap()->Add((Creature*)pet);
 
     // visual effect for levelup
-    pet->SetUInt32Value(UNIT_FIELD_LEVEL,creatureTarget->getLevel());
+    pet->SetUInt32Value(UNIT_FIELD_LEVEL, level);
 
     // caster have pet now
     player->SetPet(pet);
