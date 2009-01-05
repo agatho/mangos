@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -563,7 +563,7 @@ bool generate_sql_makefile()
             if(new_sql_updates.find(buffer) != new_sql_updates.end())
             {
                 if(!get_sql_update_info(buffer, info)) return false;
-                snprintf(newname, MAX_PATH, "%d_%0*d_%s%s%s", rev, 2, info.nr, info.db, info.has_table ? "_" : "", info.table);
+                snprintf(newname, MAX_PATH, "%d_%0*d_%s%s%s.sql", rev, 2, info.nr, info.db, info.has_table ? "_" : "", info.table);
                 file_list.insert(newname);
             }
             else
@@ -580,7 +580,7 @@ bool generate_sql_makefile()
     if(!fout) { pclose(cmd_pipe); return false; }
 
     fprintf(fout,
-        "# Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>\n"
+        "# Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>\n"
         "#\n"
         "# This program is free software; you can redistribute it and/or modify\n"
         "# it under the terms of the GNU General Public License as published by\n"
@@ -610,8 +610,11 @@ bool generate_sql_makefile()
         sql_update_dir, sql_update_dir
     );
 
-    for(std::set<std::string>::iterator itr = file_list.begin(); itr != file_list.end(); ++itr)
-        fprintf(fout, "\t%s \\\n", itr->c_str());
+    for(std::set<std::string>::iterator itr = file_list.begin(), next; itr != file_list.end(); ++itr)
+    {
+        next = itr; ++next;
+        fprintf(fout, "\t%s%s\n", itr->c_str(), next == file_list.end() ? "" : " \\");
+    }
 
     fprintf(fout,
         "\n## Additional files to include when running 'make dist'\n"
@@ -619,8 +622,11 @@ bool generate_sql_makefile()
         "EXTRA_DIST = \\\n"
     );
 
-    for(std::set<std::string>::iterator itr = file_list.begin(); itr != file_list.end(); ++itr)
-        fprintf(fout, "\t%s \\\n", itr->c_str());
+    for(std::set<std::string>::iterator itr = file_list.begin(), next; itr != file_list.end(); ++itr)
+    {
+        next = itr; ++next;
+        fprintf(fout, "\t%s%s\n", itr->c_str(), next == file_list.end() ? "" : " \\");
+    }
 
     fclose(fout);
 
@@ -821,7 +827,7 @@ int main(int argc, char *argv[])
             printf("   -f, --fetch           fetch from origin before searching for the new rev\n");
             printf("   -s, --sql             search for new sql updates and do all of the changes\n");
             printf("                         for the new rev\n");
-            printf("       --branch=BRANCH   specify which remote branch to use");
+            printf("       --branch=BRANCH   specify which remote branch to use\n");
             return 0;
         }
     }
