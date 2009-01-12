@@ -112,6 +112,26 @@ pkgdata_DATA = \
 	7024_01_mangos_spell_chain.sql \
 	7026_01_mangos_battleground_template.sql \
 	7031_01_mangos_spell_proc_event.sql \
+	7033_01_mangos_spell_proc_event.sql \
+	7034_01_mangos_spell_proc_event.sql \
+	7040_01_mangos_achievement_reward.sql \
+	7044_01_mangos_spell_proc_event.sql \
+	7047_01_characters_character_spell.sql \
+	7047_02_mangos_playercreateinfo_action.sql \
+	7047_03_mangos_playercreateinfo_spell.sql \
+	7050_01_mangos_spell_proc_event.sql \
+	7051_01_mangos_spell_proc_event.sql \
+	7052_01_mangos_spell_proc_event.sql \
+	7053_01_mangos_spell_proc_event.sql \
+	7056_01_mangos_spell_proc_event.sql \
+	7059_01_characters_character_spell.sql \
+	7059_02_characters_pet_spell.sql \
+	7060_01_mangos_spell_proc_event.sql \
+	7061_01_mangos_spell_proc_event.sql \
+	7063_01_mangos_spell_proc_event.sql \
+	7067_01_mangos_playercreateinfo_spell.sql \
+	7067_02_mangos_spell_learn_spell.sql \
+	7067_03_characters_character_spell.sql \
 	README
 
 ## Additional files to include when running 'make dist'
@@ -204,4 +224,24 @@ EXTRA_DIST = \
 	7024_01_mangos_spell_chain.sql \
 	7026_01_mangos_battleground_template.sql \
 	7031_01_mangos_spell_proc_event.sql \
+	7033_01_mangos_spell_proc_event.sql \
+	7034_01_mangos_spell_proc_event.sql \
+	7040_01_mangos_achievement_reward.sql \
+	7044_01_mangos_spell_proc_event.sql \
+	7047_01_characters_character_spell.sql \
+	7047_02_mangos_playercreateinfo_action.sql \
+	7047_03_mangos_playercreateinfo_spell.sql \
+	7050_01_mangos_spell_proc_event.sql \
+	7051_01_mangos_spell_proc_event.sql \
+	7052_01_mangos_spell_proc_event.sql \
+	7053_01_mangos_spell_proc_event.sql \
+	7056_01_mangos_spell_proc_event.sql \
+	7059_01_characters_character_spell.sql \
+	7059_02_characters_pet_spell.sql \
+	7060_01_mangos_spell_proc_event.sql \
+	7061_01_mangos_spell_proc_event.sql \
+	7063_01_mangos_spell_proc_event.sql \
+	7067_01_mangos_playercreateinfo_spell.sql \
+	7067_02_mangos_spell_learn_spell.sql \
+	7067_03_characters_character_spell.sql \
 	README
