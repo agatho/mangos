@@ -74,7 +74,7 @@ void mcs_OnlinePlayers::run()
             {
                 sIRC.Send_IRC_Channel(IRCCmd::ChanOrPM(CD), IRCCmd::MakeMsg("\002 %s", IRCOut.c_str()), true, CD->TYPE.c_str());
                 IRCOut = "";
-                ZThread::Thread::sleep(1000);
+                ACE_Based::Thread::Sleep(1000);
             }
         }
     }

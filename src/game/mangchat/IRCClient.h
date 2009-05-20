@@ -49,7 +49,7 @@ enum script_Names
 };
 
 // IRCClient main class
-class IRCClient : public ZThread::Runnable
+class IRCClient : public ACE_Based::Runnable
 {
     public:
         // IRCClient Constructor

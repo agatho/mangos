@@ -38,7 +38,7 @@ void IRCClient::run()
 
     // before we begin we wait a few 
     // mangos is still starting up.
-    ZThread::Thread::sleep(500);
+    ACE_Based::Thread::Sleep(500);
     sLog.outString("\n%s\n%s\n%s\n%s",
         "***************************************",
         "**   MangChat Threaded IRC Client    **",
@@ -81,7 +81,7 @@ void IRCClient::run()
                 sIRC.Active = false;
             // If we need to reattempt a connection wait WAIT_CONNECT_TIME milli seconds before we try again
             if(sIRC.Active)
-                ZThread::Thread::sleep(sIRC._wct);
+                ACE_Based::Thread::Sleep(sIRC._wct);
         }
         else
         {

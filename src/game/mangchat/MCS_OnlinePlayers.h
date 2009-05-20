@@ -24,7 +24,7 @@
 // in addition the command is locked so i cannot be used
 // while active.
 
-class mcs_OnlinePlayers : public ZThread::Runnable
+class mcs_OnlinePlayers : public ACE_Based::Runnable
 {
     public:
         mcs_OnlinePlayers();

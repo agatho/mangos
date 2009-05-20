@@ -299,8 +299,8 @@ int Master::Run()
     uint32 loopCounter = 0;
 
     // Start up MangChat
-    ZThread::Thread irc(new IRCClient);
-    irc.setPriority ((ZThread::Priority )2);
+    ACE_Based::Thread irc(*new IRCClient);
+    irc.setPriority ((ACE_Based::Priority )2);
 
     ///- Start up freeze catcher thread
     uint32 freeze_delay = sConfig.GetIntDefault("MaxCoreStuckTime", 0);

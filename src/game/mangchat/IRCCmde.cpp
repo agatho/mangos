@@ -1430,7 +1430,7 @@ void IRCCmd::Mute_Player(_CDATA *CD)
 void IRCCmd::Online_Players(_CDATA *CD)
 {
         sIRC.Script_Lock[MCS_Players_Online] = true;
-        ZThread::Thread script(new mcs_OnlinePlayers(CD));
+        ACE_Based::Thread script(*new mcs_OnlinePlayers(CD));
 }
 
 void IRCCmd::PM_Player(_CDATA *CD)
