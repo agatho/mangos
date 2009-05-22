@@ -17,7 +17,7 @@
 #if PLATFORM == PLATFORM_WINDOWS
   #define _MangChat_CONFIG  "mangchat.conf"
 #else
-  #define _MangChat_CONFIG  "@sysconfdir@/mangchat.conf"
+  #define _MangChat_CONFIG  SYSCONFDIR"mangchat.conf"
 #endif
 
 #endif
