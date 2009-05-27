@@ -632,7 +632,7 @@
     <ClInclude Include="..\..\src\game\mangchat\IRCCmd.h" />
     <ClInclude Include="..\..\src\game\mangchat\IRCFunc.h" />
     <ClInclude Include="..\..\src\game\mangchat\IRCLog.h" />
-    <ClInclude Include="..\..\src\game\MCS_OnlinePlayers.h" />
+    <ClInclude Include="..\..\src\game\mangchat\MCS_OnlinePlayers.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="shared.vcxproj">
