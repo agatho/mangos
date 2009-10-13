@@ -22,7 +22,7 @@
 #include "SocialMgr.h"
 
 Channel::Channel(const std::string& name, uint32 channel_id)
-: m_name(name), m_announce(true), m_moderate(false), m_channelId(channel_id), m_ownerGUID(0), m_password(""), m_flags(0)
+: m_announce(true), m_moderate(false), m_name(name), m_flags(0), m_channelId(channel_id), m_ownerGUID(0)
 {
     // set special flags if built-in channel
     ChatChannelsEntry const* ch = GetChannelEntryFor(channel_id);
@@ -169,7 +169,7 @@ void Channel::Leave(uint64 p, bool send)
 
 void Channel::KickOrBan(uint64 good, const char *badname, bool ban)
 {
-    uint32 sec = 0;
+    AccountTypes sec = SEC_PLAYER;
     Player *gplr = objmgr.GetPlayer(good);
     if(gplr)
         sec = gplr->GetSession()->GetSecurity();
@@ -298,10 +298,11 @@ void Channel::Password(uint64 p, const char *pass)
 
 void Channel::SetMode(uint64 p, const char *p2n, bool mod, bool set)
 {
-    uint32 sec = 0;
     Player *plr = objmgr.GetPlayer(p);
-    if(plr)
-        sec = plr->GetSession()->GetSecurity();
+    if (!plr)
+        return;
+
+    uint32 sec = plr->GetSession()->GetSecurity();
 
     if(!IsOn(p))
     {
@@ -366,10 +367,11 @@ void Channel::SetMode(uint64 p, const char *p2n, bool mod, bool set)
 
 void Channel::SetOwner(uint64 p, const char *newname)
 {
-    uint32 sec = 0;
     Player *plr = objmgr.GetPlayer(p);
-    if(plr)
-        sec = plr->GetSession()->GetSecurity();
+    if (!plr)
+        return;
+
+    uint32 sec = plr->GetSession()->GetSecurity();
 
     if(!IsOn(p))
     {
@@ -444,16 +446,17 @@ void Channel::List(Player* player)
         size_t pos = data.wpos();
         data << uint32(0);                                  // size of list, placeholder
 
-        bool gmInWhoList = sWorld.getConfig(CONFIG_GM_IN_WHO_LIST) || player->GetSession()->GetSecurity() > SEC_PLAYER;
+        uint32 gmLevelInWhoList = sWorld.getConfig(CONFIG_GM_LEVEL_IN_WHO_LIST);
 
         uint32 count  = 0;
-        for(PlayerList::iterator i = players.begin(); i != players.end(); ++i)
+        for(PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
         {
             Player *plr = objmgr.GetPlayer(i->first);
 
             // PLAYER can't see MODERATOR, GAME MASTER, ADMINISTRATOR characters
             // MODERATOR, GAME MASTER, ADMINISTRATOR can see all
-            if( plr && ( plr->GetSession()->GetSecurity() == SEC_PLAYER || gmInWhoList && plr->IsVisibleGloballyFor(player) ) )
+            if (plr && (player->GetSession()->GetSecurity() > SEC_PLAYER || plr->GetSession()->GetSecurity() <= gmLevelInWhoList) &&
+                plr->IsVisibleGloballyFor(player))
             {
                 data << uint64(i->first);
                 data << uint8(i->second.flags);             // flags seems to be changed...
@@ -660,7 +663,7 @@ void Channel::SetOwner(uint64 guid, bool exclaim)
 
 void Channel::SendToAll(WorldPacket *data, uint64 p)
 {
-    for(PlayerList::iterator i = players.begin(); i != players.end(); ++i)
+    for(PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
     {
         Player *plr = objmgr.GetPlayer(i->first);
         if(plr)
@@ -673,7 +676,7 @@ void Channel::SendToAll(WorldPacket *data, uint64 p)
 
 void Channel::SendToAllButOne(WorldPacket *data, uint64 who)
 {
-    for(PlayerList::iterator i = players.begin(); i != players.end(); ++i)
+    for(PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
     {
         if(i->first != who)
         {
@@ -691,12 +694,12 @@ void Channel::SendToOne(WorldPacket *data, uint64 who)
         plr->GetSession()->SendPacket(data);
 }
 
-void Channel::Voice(uint64 guid1, uint64 guid2)
+void Channel::Voice(uint64 /*guid1*/, uint64 /*guid2*/)
 {
 
 }
 
-void Channel::DeVoice(uint64 guid1, uint64 guid2)
+void Channel::DeVoice(uint64 /*guid1*/, uint64 /*guid2*/)
 {
 
 }

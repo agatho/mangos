@@ -27,6 +27,7 @@
 #include "Timer.h"
 #include "Policies/Singleton.h"
 #include "SharedDefines.h"
+#include "ace/Atomic_Op.h"
 
 #include <map>
 #include <set>
@@ -42,6 +43,16 @@ struct ScriptInfo;
 class SqlResultQueue;
 class QueryResult;
 class WorldSocket;
+
+// ServerMessages.dbc
+enum ServerMessageType
+{
+    SERVER_MSG_SHUTDOWN_TIME      = 1,
+    SERVER_MSG_RESTART_TIME       = 2,
+    SERVER_MSG_STRING             = 3,
+    SERVER_MSG_SHUTDOWN_CANCELLED = 4,
+    SERVER_MSG_RESTART_CANCELLED  = 5
+};
 
 enum ShutdownMask
 {
@@ -97,6 +108,9 @@ enum WorldConfigs
     CONFIG_STRICT_PLAYER_NAMES,
     CONFIG_STRICT_CHARTER_NAMES,
     CONFIG_STRICT_PET_NAMES,
+    CONFIG_MIN_PLAYER_NAME,
+    CONFIG_MIN_CHARTER_NAME,
+    CONFIG_MIN_PET_NAME,
     CONFIG_CHARACTERS_CREATING_DISABLED,
     CONFIG_CHARACTERS_PER_ACCOUNT,
     CONFIG_CHARACTERS_PER_REALM,
@@ -113,23 +127,22 @@ enum WorldConfigs
     CONFIG_START_ARENA_POINTS,
     CONFIG_INSTANCE_IGNORE_LEVEL,
     CONFIG_INSTANCE_IGNORE_RAID,
-    CONFIG_BATTLEGROUND_CAST_DESERTER,
-    CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_ENABLE,
-    CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_PLAYERONLY,
     CONFIG_INSTANCE_RESET_TIME_HOUR,
     CONFIG_INSTANCE_UNLOAD_DELAY,
     CONFIG_CAST_UNSTUCK,
     CONFIG_MAX_PRIMARY_TRADE_SKILL,
     CONFIG_MIN_PETITION_SIGNS,
     CONFIG_GM_LOGIN_STATE,
+    CONFIG_GM_VISIBLE_STATE,
     CONFIG_GM_ACCEPT_TICKETS,
     CONFIG_GM_CHAT,
     CONFIG_GM_WISPERING_TO,
-    CONFIG_GM_IN_GM_LIST,
-    CONFIG_GM_IN_WHO_LIST,
+    CONFIG_GM_LEVEL_IN_GM_LIST,
+    CONFIG_GM_LEVEL_IN_WHO_LIST,
     CONFIG_GM_LOG_TRADE,
     CONFIG_START_GM_LEVEL,
     CONFIG_GM_LOWER_SECURITY,
+    CONFIG_GM_ALLOW_ACHIEVEMENT_GAINS,
     CONFIG_GROUP_VISIBILITY,
     CONFIG_MAIL_DELIVERY_DELAY,
     CONFIG_UPTIME_UPDATE,
@@ -153,8 +166,10 @@ enum WorldConfigs
     CONFIG_CHATFLOOD_MESSAGE_DELAY,
     CONFIG_CHATFLOOD_MUTE_TIME,
     CONFIG_EVENT_ANNOUNCE,
+    CONFIG_CREATURE_FAMILY_FLEE_ASSISTANCE_RADIUS,
     CONFIG_CREATURE_FAMILY_ASSISTANCE_RADIUS,
     CONFIG_CREATURE_FAMILY_ASSISTANCE_DELAY,
+    CONFIG_CREATURE_FAMILY_FLEE_DELAY,
     CONFIG_WORLD_BOSS_LEVEL_DIFF,
     CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF,
     CONFIG_QUEST_HIGH_LEVEL_HIDE_DIFF,
@@ -163,6 +178,8 @@ enum WorldConfigs
     CONFIG_SILENTLY_GM_JOIN_TO_CHANNEL,
     CONFIG_TALENTS_INSPECTING,
     CONFIG_CHAT_FAKE_MESSAGE_PREVENTING,
+    CONFIG_CHAT_STRICT_LINK_CHECKING_SEVERITY,
+    CONFIG_CHAT_STRICT_LINK_CHECKING_KICK,
     CONFIG_CORPSE_DECAY_NORMAL,
     CONFIG_CORPSE_DECAY_RARE,
     CONFIG_CORPSE_DECAY_ELITE,
@@ -176,12 +193,18 @@ enum WorldConfigs
     CONFIG_DEATH_BONES_BG_OR_ARENA,
     CONFIG_THREAT_RADIUS,
     CONFIG_INSTANT_LOGOUT,
-    CONFIG_DISABLE_BREATHING,
     CONFIG_ALL_TAXI_PATHS,
     CONFIG_DECLINED_NAMES_USED,
     CONFIG_LISTEN_RANGE_SAY,
     CONFIG_LISTEN_RANGE_TEXTEMOTE,
     CONFIG_LISTEN_RANGE_YELL,
+    CONFIG_SKILL_MILLING,
+    CONFIG_BATTLEGROUND_CAST_DESERTER,
+    CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_ENABLE,
+    CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_PLAYERONLY,
+    CONFIG_BATTLEGROUND_INVITATION_TYPE,
+    CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER,
+    CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH,
     CONFIG_ARENA_MAX_RATING_DIFFERENCE,
     CONFIG_ARENA_RATING_DISCARD_TIMER,
     CONFIG_ARENA_AUTO_DISTRIBUTE_POINTS,
@@ -189,8 +212,16 @@ enum WorldConfigs
     CONFIG_ARENA_QUEUE_ANNOUNCER_ENABLE,
     CONFIG_ARENA_SEASON_ID,
     CONFIG_ARENA_SEASON_IN_PROGRESS,
-    CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER,
-    CONFIG_SKILL_MILLING,
+    CONFIG_OFFHAND_CHECK_AT_TALENTS_RESET,
+    CONFIG_CLIENTCACHE_VERSION,
+    CONFIG_GUILD_EVENT_LOG_COUNT,
+    CONFIG_GUILD_BANK_EVENT_LOG_COUNT,
+    CONFIG_TIMERBAR_FATIGUE_GMLEVEL,
+    CONFIG_TIMERBAR_FATIGUE_MAX,
+    CONFIG_TIMERBAR_BREATH_GMLEVEL,
+    CONFIG_TIMERBAR_BREATH_MAX,
+    CONFIG_TIMERBAR_FIRE_GMLEVEL,
+    CONFIG_TIMERBAR_FIRE_MAX,
     CONFIG_VALUE_COUNT
 };
 
@@ -217,8 +248,9 @@ enum Rates
     RATE_XP_KILL,
     RATE_XP_QUEST,
     RATE_XP_EXPLORE,
-    RATE_XP_PAST_70,
     RATE_REPUTATION_GAIN,
+    RATE_REPUTATION_LOWLEVEL_KILL,
+    RATE_REPUTATION_LOWLEVEL_QUEST,
     RATE_CREATURE_NORMAL_HP,
     RATE_CREATURE_ELITE_ELITE_HP,
     RATE_CREATURE_ELITE_RAREELITE_HP,
@@ -317,7 +349,8 @@ enum RealmZone
 #define SCRIPT_COMMAND_CLOSE_DOOR           12              // source = unit, datalong=db_guid, datalong2=reset_delay
 #define SCRIPT_COMMAND_ACTIVATE_OBJECT      13              // source = unit, target=GO
 #define SCRIPT_COMMAND_REMOVE_AURA          14              // source (datalong2!=0) or target (datalong==0) unit, datalong = spell_id
-#define SCRIPT_COMMAND_CAST_SPELL           15              // source (datalong2!=0) or target (datalong==0) unit, datalong = spell_id
+#define SCRIPT_COMMAND_CAST_SPELL           15              // source/target cast spell at target/source (script->datalong2: 0: s->t 1: s->s 2: t->t 3: t->s
+#define SCRIPT_COMMAND_PLAY_SOUND           16              // source = any object, target=any/player, datalong (sound_id), datalong2 (bitmask: 0/1=anyone/target, 0/2=with distance dependent, so 1|2 = 3 is target with distance dependent)
 
 /// Storage class for commands issued for delayed execution
 struct CliCommandHolder
@@ -385,11 +418,11 @@ class World
         void SetAllowMovement(bool allow) { m_allowMovement = allow; }
 
         /// Set a new Message of the Day
-        void SetMotd(std::string motd) { m_motd = motd; }
+        void SetMotd(const std::string& motd) { m_motd = motd; }
         /// Get the current Message of the Day
         const char* GetMotd() const { return m_motd.c_str(); }
 
-        uint32 GetDefaultDbcLocale() const { return m_defaultDbcLocale; }
+        LocaleConstant GetDefaultDbcLocale() const { return m_defaultDbcLocale; }
 
         /// Get the path where data (dbc, maps) are stored on disk
         std::string GetDataPath() const { return m_dataPath; }
@@ -416,7 +449,7 @@ class World
         void SendGlobalMessage(WorldPacket *packet, WorldSession *self = 0, uint32 team = 0);
         void SendZoneMessage(uint32 zone, WorldPacket *packet, WorldSession *self = 0, uint32 team = 0);
         void SendZoneText(uint32 zone, const char *text, WorldSession *self = 0, uint32 team = 0);
-        void SendServerMessage(uint32 type, const char *text = "", Player* player = NULL);
+        void SendServerMessage(ServerMessageType type, const char *text = "", Player* player = NULL);
 
         /// Are we in the middle of a shutdown?
         bool IsShutdowning() const { return m_ShutdownTimer > 0; }
@@ -427,9 +460,9 @@ class World
         static void StopNow(uint8 exitcode) { m_stopEvent = true; m_ExitCode = exitcode; }
         static bool IsStopped() { return m_stopEvent; }
 
-        void Update(time_t diff);
+        void Update(uint32 diff);
 
-        void UpdateSessions( time_t diff );
+        void UpdateSessions( uint32 diff );
         /// Set a server rate (see #Rates)
         void setRate(Rates rate,float value) { rate_values[rate]=value; }
         /// Get a server rate (see #Rates)
@@ -455,23 +488,25 @@ class World
         bool IsPvPRealm() { return (getConfig(CONFIG_GAME_TYPE) == REALM_TYPE_PVP || getConfig(CONFIG_GAME_TYPE) == REALM_TYPE_RPPVP || getConfig(CONFIG_GAME_TYPE) == REALM_TYPE_FFA_PVP); }
         bool IsFFAPvPRealm() { return getConfig(CONFIG_GAME_TYPE) == REALM_TYPE_FFA_PVP; }
 
-        bool KickPlayer(const std::string& playerName);
         void KickAll();
         void KickAllLess(AccountTypes sec);
         BanReturn BanAccount(BanMode mode, std::string nameOrIP, std::string duration, std::string reason, std::string author);
         bool RemoveBanAccount(BanMode mode, std::string nameOrIP);
 
-        void ScriptsStart(std::map<uint32, std::multimap<uint32, ScriptInfo> > const& scripts, uint32 id, Object* source, Object* target);
-        void ScriptCommandStart(ScriptInfo const& script, uint32 delay, Object* source, Object* target);
-        bool IsScriptScheduled() const { return !m_scriptSchedule.empty(); }
+        uint32 IncreaseScheduledScriptsCount() { return (uint32)++m_scheduledScripts; }
+        uint32 DecreaseScheduledScriptCount() { return (uint32)--m_scheduledScripts; }
+        uint32 DecreaseScheduledScriptCount(size_t count) { return (uint32)(m_scheduledScripts -= count); }
+        bool IsScriptScheduled() const { return m_scheduledScripts > 0; }
 
         // for max speed access
-        static float GetMaxVisibleDistanceForCreature() { return m_MaxVisibleDistanceForCreature; }
-        static float GetMaxVisibleDistanceForPlayer()   { return m_MaxVisibleDistanceForPlayer;   }
-        static float GetMaxVisibleDistanceForObject()   { return m_MaxVisibleDistanceForObject;   }
-        static float GetMaxVisibleDistanceInFlight()    { return m_MaxVisibleDistanceInFlight;    }
-        static float GetVisibleUnitGreyDistance()       { return m_VisibleUnitGreyDistance;       }
-        static float GetVisibleObjectGreyDistance()     { return m_VisibleObjectGreyDistance;     }
+        static float GetMaxVisibleDistanceOnContinents()    { return m_MaxVisibleDistanceOnContinents; }
+        static float GetMaxVisibleDistanceInInstances()     { return m_MaxVisibleDistanceInInctances;  }
+        static float GetMaxVisibleDistanceInBGArenas()      { return m_MaxVisibleDistanceInBGArenas;   }
+        static float GetMaxVisibleDistanceForObject()       { return m_MaxVisibleDistanceForObject;   }
+
+        static float GetMaxVisibleDistanceInFlight()        { return m_MaxVisibleDistanceInFlight;    }
+        static float GetVisibleUnitGreyDistance()           { return m_VisibleUnitGreyDistance;       }
+        static float GetVisibleObjectGreyDistance()         { return m_VisibleObjectGreyDistance;     }
 
         void ProcessCliCommands();
         void QueueCliCommand( CliCommandHolder::Print* zprintf, char const* input ) { cliCmdQueue.add(new CliCommandHolder(input, zprintf)); }
@@ -486,6 +521,7 @@ class World
         //used World DB version
         void LoadDBVersion();
         char const* GetDBVersion() { return m_DBVersion.c_str(); }
+        char const* GetCreatureEventAIVersion() { return m_CreatureEventAIVersion.c_str(); }
 
         //used Script version
         void SetScriptsVersion(char const* version) { m_ScriptsVersion = version ? version : "unknown scripting library"; }
@@ -493,7 +529,6 @@ class World
 
     protected:
         void _UpdateGameTime();
-        void ScriptsProcess();
         // callback for UpdateRealmCharacters
         void _UpdateRealmCharCount(QueryResult *resultCharCount, uint32 accountId);
 
@@ -504,6 +539,9 @@ class World
         static uint8 m_ExitCode;
         uint32 m_ShutdownTimer;
         uint32 m_ShutdownMask;
+
+        //atomic op counter for active scripts amount
+        ACE_Atomic_Op<ACE_Thread_Mutex, long> m_scheduledScripts;
 
         time_t m_startTime;
         time_t m_gameTime;
@@ -518,8 +556,6 @@ class World
         uint32 m_maxActiveSessionCount;
         uint32 m_maxQueuedSessionCount;
 
-        std::multimap<time_t, ScriptAction> m_scriptSchedule;
-
         float rate_values[MAX_RATES];
         uint32 m_configs[CONFIG_VALUE_COUNT];
         int32 m_playerLimit;
@@ -531,15 +567,17 @@ class World
         std::string m_dataPath;
 
         // for max speed access
-        static float m_MaxVisibleDistanceForCreature;
-        static float m_MaxVisibleDistanceForPlayer;
+        static float m_MaxVisibleDistanceOnContinents;
+        static float m_MaxVisibleDistanceInInctances;
+        static float m_MaxVisibleDistanceInBGArenas;
         static float m_MaxVisibleDistanceForObject;
+
         static float m_MaxVisibleDistanceInFlight;
         static float m_VisibleUnitGreyDistance;
         static float m_VisibleObjectGreyDistance;
 
         // CLI command holder to be thread safe
-        ZThread::LockedQueue<CliCommandHolder*, ZThread::FastMutex> cliCmdQueue;
+        ACE_Based::LockedQueue<CliCommandHolder*,ACE_Thread_Mutex> cliCmdQueue;
         SqlResultQueue *m_resultQueue;
 
         // next daily quests reset time
@@ -550,10 +588,11 @@ class World
 
         //sessions that are added async
         void AddSession_(WorldSession* s);
-        ZThread::LockedQueue<WorldSession*, ZThread::FastMutex> addSessQueue;
+        ACE_Based::LockedQueue<WorldSession*, ACE_Thread_Mutex> addSessQueue;
 
         //used versions
         std::string m_DBVersion;
+        std::string m_CreatureEventAIVersion;
         std::string m_ScriptsVersion;
 };
 

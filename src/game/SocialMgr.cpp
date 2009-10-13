@@ -21,7 +21,6 @@
 #include "Database/DatabaseEnv.h"
 #include "Opcodes.h"
 #include "WorldPacket.h"
-#include "WorldSession.h"
 #include "Player.h"
 #include "ObjectMgr.h"
 #include "World.h"
@@ -42,10 +41,10 @@ PlayerSocial::~PlayerSocial()
 uint32 PlayerSocial::GetNumberOfSocialsWithFlag(SocialFlag flag)
 {
     uint32 counter = 0;
-    for(PlayerSocialMap::iterator itr = m_playerSocialMap.begin(); itr != m_playerSocialMap.end(); ++itr)
+    for(PlayerSocialMap::const_iterator itr = m_playerSocialMap.begin(); itr != m_playerSocialMap.end(); ++itr)
     {
         if(itr->second.Flags & flag)
-            counter++;
+            ++counter;
     }
     return counter;
 }
@@ -68,7 +67,7 @@ bool PlayerSocial::AddToSocialList(uint32 friend_guid, bool ignore)
     if(ignore)
         flag = SOCIAL_FLAG_IGNORED;
 
-    PlayerSocialMap::iterator itr = m_playerSocialMap.find(friend_guid);
+    PlayerSocialMap::const_iterator itr = m_playerSocialMap.find(friend_guid);
     if(itr != m_playerSocialMap.end())
     {
         CharacterDatabase.PExecute("UPDATE character_social SET flags = (flags | %u) WHERE guid = '%u' AND friend = '%u'", flag, GetPlayerGUID(), friend_guid);
@@ -108,7 +107,7 @@ void PlayerSocial::RemoveFromSocialList(uint32 friend_guid, bool ignore)
 
 void PlayerSocial::SetFriendNote(uint32 friend_guid, std::string note)
 {
-    PlayerSocialMap::iterator itr = m_playerSocialMap.find(friend_guid);
+    PlayerSocialMap::const_iterator itr = m_playerSocialMap.find(friend_guid);
     if(itr == m_playerSocialMap.end())                      // not exist
         return;
 
@@ -156,7 +155,7 @@ void PlayerSocial::SendSocialList()
 
 bool PlayerSocial::HasFriend(uint32 friend_guid)
 {
-    PlayerSocialMap::iterator itr = m_playerSocialMap.find(friend_guid);
+    PlayerSocialMap::const_iterator itr = m_playerSocialMap.find(friend_guid);
     if(itr != m_playerSocialMap.end())
         return itr->second.Flags & SOCIAL_FLAG_FRIEND;
     return false;
@@ -164,7 +163,7 @@ bool PlayerSocial::HasFriend(uint32 friend_guid)
 
 bool PlayerSocial::HasIgnore(uint32 ignore_guid)
 {
-    PlayerSocialMap::iterator itr = m_playerSocialMap.find(ignore_guid);
+    PlayerSocialMap::const_iterator itr = m_playerSocialMap.find(ignore_guid);
     if(itr != m_playerSocialMap.end())
         return itr->second.Flags & SOCIAL_FLAG_IGNORED;
     return false;
@@ -180,13 +179,6 @@ SocialMgr::~SocialMgr()
 
 }
 
-void SocialMgr::RemovePlayerSocial(uint32 guid)
-{
-    SocialMap::iterator itr = m_socialMap.find(guid);
-    if(itr != m_socialMap.end())
-        m_socialMap.erase(itr);
-}
-
 void SocialMgr::GetFriendInfo(Player *player, uint32 friendGUID, FriendInfo &friendInfo)
 {
     if(!player)
@@ -195,9 +187,9 @@ void SocialMgr::GetFriendInfo(Player *player, uint32 friendGUID, FriendInfo &fri
     Player *pFriend = ObjectAccessor::FindPlayer(friendGUID);
 
     uint32 team = player->GetTeam();
-    uint32 security = player->GetSession()->GetSecurity();
+    AccountTypes security = player->GetSession()->GetSecurity();
     bool allowTwoSideWhoList = sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_WHO_LIST);
-    bool gmInWhoList = sWorld.getConfig(CONFIG_GM_IN_WHO_LIST) || security > SEC_PLAYER;
+    AccountTypes gmLevelInWhoList = AccountTypes (sWorld.getConfig(CONFIG_GM_LEVEL_IN_WHO_LIST));
 
     PlayerSocialMap::iterator itr = player->GetSocial()->m_playerSocialMap.find(friendGUID);
     if(itr != player->GetSocial()->m_playerSocialMap.end())
@@ -205,10 +197,10 @@ void SocialMgr::GetFriendInfo(Player *player, uint32 friendGUID, FriendInfo &fri
 
     // PLAYER see his team only and PLAYER can't see MODERATOR, GAME MASTER, ADMINISTRATOR characters
     // MODERATOR, GAME MASTER, ADMINISTRATOR can see all
-    if( pFriend && pFriend->GetName() &&
-        ( security > SEC_PLAYER ||
-        ( pFriend->GetTeam() == team || allowTwoSideWhoList ) &&
-        ( pFriend->GetSession()->GetSecurity() == SEC_PLAYER || gmInWhoList && pFriend->IsVisibleGloballyFor(player) )))
+    if (pFriend && pFriend->GetName() &&
+        (security > SEC_PLAYER ||
+        ((pFriend->GetTeam() == team || allowTwoSideWhoList) && (pFriend->GetSession()->GetSecurity() <= gmLevelInWhoList))) &&
+        pFriend->IsVisibleGloballyFor(player))
     {
         friendInfo.Status = FRIEND_STATUS_ONLINE;
         if(pFriend->isAFK())
@@ -248,6 +240,8 @@ void SocialMgr::SendFriendStatus(Player *player, FriendsResult result, uint32 fr
         case FRIEND_ADDED_ONLINE:
             data << fi.Note;
             break;
+        default:
+            break;
     }
 
     switch(result)
@@ -258,6 +252,8 @@ void SocialMgr::SendFriendStatus(Player *player, FriendsResult result, uint32 fr
             data << uint32(fi.Area);
             data << uint32(fi.Level);
             data << uint32(fi.Class);
+            break;
+        default:
             break;
     }
 
@@ -273,24 +269,24 @@ void SocialMgr::BroadcastToFriendListers(Player *player, WorldPacket *packet)
         return;
 
     uint32 team     = player->GetTeam();
-    uint32 security = player->GetSession()->GetSecurity();
+    AccountTypes security = player->GetSession()->GetSecurity();
     uint32 guid     = player->GetGUIDLow();
-    bool gmInWhoList = sWorld.getConfig(CONFIG_GM_IN_WHO_LIST);
+    AccountTypes gmLevelInWhoList = AccountTypes(sWorld.getConfig(CONFIG_GM_LEVEL_IN_WHO_LIST));
     bool allowTwoSideWhoList = sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_WHO_LIST);
 
-    for(SocialMap::iterator itr = m_socialMap.begin(); itr != m_socialMap.end(); ++itr)
+    for(SocialMap::const_iterator itr = m_socialMap.begin(); itr != m_socialMap.end(); ++itr)
     {
-        PlayerSocialMap::iterator itr2 = itr->second.m_playerSocialMap.find(guid);
+        PlayerSocialMap::const_iterator itr2 = itr->second.m_playerSocialMap.find(guid);
         if(itr2 != itr->second.m_playerSocialMap.end() && (itr2->second.Flags & SOCIAL_FLAG_FRIEND))
         {
             Player *pFriend = ObjectAccessor::FindPlayer(MAKE_NEW_GUID(itr->first, 0, HIGHGUID_PLAYER));
 
             // PLAYER see his team only and PLAYER can't see MODERATOR, GAME MASTER, ADMINISTRATOR characters
             // MODERATOR, GAME MASTER, ADMINISTRATOR can see all
-            if( pFriend && pFriend->IsInWorld() &&
-                ( pFriend->GetSession()->GetSecurity() > SEC_PLAYER ||
-                ( pFriend->GetTeam() == team || allowTwoSideWhoList ) &&
-                (security == SEC_PLAYER || gmInWhoList && player->IsVisibleGloballyFor(pFriend) )))
+            if (pFriend && pFriend->IsInWorld() &&
+                (pFriend->GetSession()->GetSecurity() > SEC_PLAYER ||
+                ((pFriend->GetTeam() == team || allowTwoSideWhoList) && security <= gmLevelInWhoList)) &&
+                player->IsVisibleGloballyFor(pFriend))
             {
                 pFriend->GetSession()->SendPacket(packet);
             }

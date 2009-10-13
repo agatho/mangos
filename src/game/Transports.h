@@ -36,16 +36,16 @@ class TransportPath
             uint32 delay;
         };
 
-        inline void SetLength(const unsigned int sz)
+        void SetLength(const unsigned int sz)
         {
             i_nodes.resize( sz );
         }
 
-        inline unsigned int Size(void) const { return i_nodes.size(); }
-        inline bool Empty(void) const { return i_nodes.empty(); }
-        inline void Resize(unsigned int sz) { i_nodes.resize(sz); }
-        inline void Clear(void) { i_nodes.clear(); }
-        inline PathNode* GetNodes(void) { return static_cast<PathNode *>(&i_nodes[0]); }
+        unsigned int Size(void) const { return i_nodes.size(); }
+        bool Empty(void) const { return i_nodes.empty(); }
+        void Resize(unsigned int sz) { i_nodes.resize(sz); }
+        void Clear(void) { i_nodes.clear(); }
+        PathNode* GetNodes(void) { return static_cast<PathNode *>(&i_nodes[0]); }
 
         PathNode& operator[](const unsigned int idx) { return i_nodes[idx]; }
         const PathNode& operator()(const unsigned int idx) const { return i_nodes[idx]; }
@@ -54,22 +54,10 @@ class TransportPath
         std::vector<PathNode> i_nodes;
 };
 
-class Transport : private GameObject
+class Transport : public GameObject
 {
     public:
         explicit Transport();
-
-        // prevent using Transports as normal GO, but allow call some inherited functions
-        using GameObject::IsTransport;
-        using GameObject::GetEntry;
-        using GameObject::GetGUID;
-        using GameObject::GetGUIDLow;
-        using GameObject::GetMapId;
-        using GameObject::GetPositionX;
-        using GameObject::GetPositionY;
-        using GameObject::GetPositionZ;
-        using GameObject::BuildCreateUpdateBlockForPlayer;
-        using GameObject::BuildOutOfRangeUpdateBlock;
 
         bool Create(uint32 guidlow, uint32 mapid, float x, float y, float z, float ang, uint32 animprogress, uint32 dynflags);
         bool GenerateWaypoints(uint32 pathid, std::set<uint32> &mapids);
@@ -80,7 +68,6 @@ class Transport : private GameObject
         typedef std::set<Player*> PlayerSet;
         PlayerSet const& GetPassengers() const { return m_passengers; }
 
-        std::string m_name;
     private:
         struct WayPoint
         {
@@ -96,8 +83,8 @@ class Transport : private GameObject
 
         typedef std::map<uint32, WayPoint> WayPointMap;
 
-        WayPointMap::iterator m_curr;
-        WayPointMap::iterator m_next;
+        WayPointMap::const_iterator m_curr;
+        WayPointMap::const_iterator m_next;
         uint32 m_pathTime;
         uint32 m_timer;
 
@@ -110,6 +97,7 @@ class Transport : private GameObject
 
     private:
         void TeleportTransport(uint32 newMapid, float x, float y, float z);
-        WayPointMap::iterator GetNextWayPoint();
+        void UpdateForMap(Map const* map);
+        WayPointMap::const_iterator GetNextWayPoint();
 };
 #endif

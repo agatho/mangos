@@ -38,6 +38,7 @@ alter table creature_movement add `wpguid` int(11) default '0';
 #include "DestinationHolderImp.h"
 #include "CreatureAI.h"
 #include "WaypointManager.h"
+#include "WorldPacket.h"
 
 #include <cassert>
 
@@ -56,7 +57,7 @@ void WaypointMovementGenerator<Creature>::LoadPath(Creature &c)
 
     uint32 node_count = i_path->size();
     i_hasDone.resize(node_count);
-    for(uint32 i = 0; i < node_count-1; i++)
+    for(uint32 i = 0; i < node_count-1; ++i)
         i_hasDone[i] = false;
 
     // to prevent a misbehavior inside "update"
@@ -82,7 +83,7 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
 
     // Waypoint movement can be switched on/off
     // This is quite handy for escort quests and other stuff
-    if(creature.hasUnitState(UNIT_STAT_ROOT | UNIT_STAT_STUNNED | UNIT_STAT_DISTRACTED))
+    if(creature.hasUnitState(UNIT_STAT_ROOT | UNIT_STAT_STUNNED | UNIT_STAT_DISTRACTED | UNIT_STAT_DIED))
         return true;
 
     // prevent a crash at empty waypoint path.
@@ -105,22 +106,22 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
     {
         if( i_nextMoveTime.Passed()) // Timer has elapsed, meaning this part controlled it
         {
-            SetStopedByPlayer(false);
+            SetStoppedByPlayer(false);
             // Now we re-set destination to same node and start travel
             creature.addUnitState(UNIT_STAT_ROAMING);
             if (creature.canFly())
-                creature.AddUnitMovementFlag(MOVEMENTFLAG_FLYING2);
+                creature.AddMonsterMoveFlag(MONSTER_MOVE_FLY);
             const WaypointNode &node = i_path->at(i_currentNode);
             i_destinationHolder.SetDestination(traveller, node.x, node.y, node.z);
             i_nextMoveTime.Reset(i_destinationHolder.GetTotalTravelTime());
         }
         else // if( !i_nextMoveTime.Passed())
         { // unexpected end of timer && creature stopped && not at end of segment
-            if (!IsStopedByPlayer())
+            if (!IsStoppedByPlayer())
             {                                                   // Put 30 seconds delay
                 i_destinationHolder.IncreaseTravelTime(STOP_TIME_FOR_PLAYER);
                 i_nextMoveTime.Reset(STOP_TIME_FOR_PLAYER);
-                SetStopedByPlayer(true);                        // Mark we did it
+                SetStoppedByPlayer(true);                        // Mark we did it
             }
         }
         return true;    // Abort here this update
@@ -159,10 +160,10 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
                     else
                         creature.Say(behavior->textid[0], 0, 0);
                 }
-
-                i_hasDone[idx] = true;
-                MovementInform(creature);
             }                                               // wpBehaviour found
+
+            i_hasDone[idx] = true;
+            MovementInform(creature);
         }                                                   // HasDone == false
     }                                                       // i_creature.IsStopped()
 
@@ -172,7 +173,7 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
         {
             creature.addUnitState(UNIT_STAT_ROAMING);
             if (creature.canFly())
-                creature.AddUnitMovementFlag(MOVEMENTFLAG_FLYING2);
+                creature.AddMonsterMoveFlag(MONSTER_MOVE_FLY);
             const WaypointNode &node = i_path->at(i_currentNode);
             i_destinationHolder.SetDestination(traveller, node.x, node.y, node.z);
             i_nextMoveTime.Reset(i_destinationHolder.GetTotalTravelTime());
@@ -193,7 +194,7 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
         else // If not stopped then stop it and set the reset of TimeTracker to waittime
         {
             creature.StopMoving();
-            SetStopedByPlayer(false);
+            SetStoppedByPlayer(false);
             i_nextMoveTime.Reset(i_path->at(i_currentNode).delay);
             ++i_currentNode;
             if( i_currentNode >= i_path->size() )
@@ -240,16 +241,18 @@ void FlightPathMovementGenerator::Initialize(Player &player)
     // do not send movement, it was sent already
     i_destinationHolder.SetDestination(traveller, i_path[i_currentNode].x, i_path[i_currentNode].y, i_path[i_currentNode].z, false);
 
-    player.SendMonsterMoveByPath(GetPath(),GetCurrentNode(),GetPathAtMapEnd(),MOVEMENTFLAG_WALK_MODE|MOVEMENTFLAG_ONTRANSPORT);
+    player.SendMonsterMoveByPath(GetPath(),GetCurrentNode(),GetPathAtMapEnd(),MONSTER_MOVE_SPLINE_FLY);
 }
 
 void FlightPathMovementGenerator::Finalize(Player & player)
 {
+    // remove flag to prevent send object build movement packets for flight state and crash (movement generator already not at top of stack)
+    player.clearUnitState(UNIT_STAT_IN_FLIGHT);
+
     float x, y, z;
-    i_destinationHolder.GetLocationNow(player.GetMapId(), x, y, z);
+    i_destinationHolder.GetLocationNow(player.GetBaseMap(), x, y, z);
     player.SetPosition(x, y, z, player.GetOrientation());
 
-    player.clearUnitState(UNIT_STAT_IN_FLIGHT);
     player.Unmount();
     player.RemoveFlag(UNIT_FIELD_FLAGS,UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_TAXI_FLIGHT);
 
@@ -259,7 +262,9 @@ void FlightPathMovementGenerator::Finalize(Player & player)
         if(player.pvpInfo.inHostileArea)
             player.CastSpell(&player, 2479, true);
 
-        player.SetUnitMovementFlags(MOVEMENTFLAG_WALK_MODE);
+        // update z position to ground and orientation for landing point
+        // this prevent cheating with landing  point at lags
+        // when client side flight end early in comparison server side
         player.StopMoving();
     }
 }
@@ -305,7 +310,7 @@ void FlightPathMovementGenerator::SetCurrentNodeAfterTeleport()
         return;
 
     uint32 map0 = i_mapIds[0];
-    for(int i = 1; i < i_mapIds.size(); ++i)
+    for (size_t i = 1; i < i_mapIds.size(); ++i)
     {
         if(i_mapIds[i]!=map0)
         {
@@ -468,7 +473,7 @@ int CreatePathAStar(gentity_t *bot, int from, int to, short int *pathlist)
                     break;
             }
 
-            for (i = 0; i < nodes[atNode].enodenum; i++)    //loop through all the links for this node
+            for (i = 0; i < nodes[atNode].enodenum; ++i)    //loop through all the links for this node
             {
                 newnode = nodes[atNode].links[i].targetNode;
 
@@ -526,7 +531,7 @@ int CreatePathAStar(gentity_t *bot, int from, int to, short int *pathlist)
                         parent[newnode] = atNode;           //set the new parent for this node
                         gcost[newnode] = gc;                //and the new g cost
 
-                        for (i = 1; i < numOpen; i++)       //loop through all the items on the open list
+                        for (i = 1; i < numOpen; ++i)       //loop through all the items on the open list
                         {
                             if (openlist[i] == newnode)     //find this node in the list
                             {

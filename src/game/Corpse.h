@@ -56,7 +56,7 @@ class Corpse : public WorldObject
         void RemoveFromWorld();
 
         bool Create( uint32 guidlow );
-        bool Create( uint32 guidlow, Player *owner, uint32 mapid, float x, float y, float z, float ang );
+        bool Create( uint32 guidlow, Player *owner );
 
         void SaveToDB();
         bool LoadFromDB(uint32 guid, QueryResult *result);
@@ -74,22 +74,21 @@ class Corpse : public WorldObject
         GridPair const& GetGrid() const { return m_grid; }
         void SetGrid(GridPair const& grid) { m_grid = grid; }
 
-        bool isVisibleForInState(Player const* u, bool inVisibleList) const;
+        bool isVisibleForInState(Player const* u, WorldObject const* viewPoint, bool inVisibleList) const;
 
         Loot loot;                                          // remove insignia ONLY at BG
         Player* lootRecipient;
         bool lootForBody;
 
-        void Say(const char* text, uint32 language, uint64 TargetGuid) { MonsterSay(text,language,TargetGuid); }
-        void Yell(const char* text, uint32 language, uint64 TargetGuid) { MonsterYell(text,language,TargetGuid); }
-        void TextEmote(const char* text, uint64 TargetGuid) { MonsterTextEmote(text,TargetGuid); }
-        void Whisper(const char* text, uint64 receiver) { MonsterWhisper(text,receiver); }
         void Say(int32 textId, uint32 language, uint64 TargetGuid) { MonsterSay(textId,language,TargetGuid); }
         void Yell(int32 textId, uint32 language, uint64 TargetGuid) { MonsterYell(textId,language,TargetGuid); }
         void TextEmote(int32 textId, uint64 TargetGuid) { MonsterTextEmote(textId,TargetGuid); }
         void Whisper(int32 textId,uint64 receiver) { MonsterWhisper(textId,receiver); }
+        void YellToZone(int32 textId, uint32 language, uint64 TargetGuid) { MonsterYellToZone(textId,language,TargetGuid); }
 
         GridReference<Corpse> &GetGridRef() { return m_gridRef; }
+
+        bool isActiveObject() const { return false; }
     private:
         GridReference<Corpse> m_gridRef;
 

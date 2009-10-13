@@ -31,7 +31,10 @@
 #include "SystemConfig.h"
 #include "revision.h"
 #include "revision_nr.h"
+#include "revision_sql.h"
 #include "Util.h"
+#include <openssl/opensslv.h>
+#include <openssl/crypto.h>
 
 #ifdef WIN32
 #include "ServiceWin32.h"
@@ -54,7 +57,7 @@ void HookSignals();
 bool stopEvent = false;                                     ///< Setting it to true stops the server
 RealmList m_realmList;                                      ///< Holds the list of realms for this server
 
-DatabaseType dbRealmServer;                                 ///< Accessor to the realm server database
+DatabaseType loginDatabase;                                 ///< Accessor to the realm server database
 
 /// Print out the usage string for this program on the console.
 void usage(const char *prog)
@@ -142,6 +145,7 @@ extern int main(int argc, char **argv)
         sLog.outError("Could not find configuration file %s.", cfg_file);
         return 1;
     }
+    sLog.Initialize();
 
     sLog.outString( "%s [realm-daemon]", _FULLVERSION(REVISION_DATE,REVISION_TIME,REVISION_NR,REVISION_ID) );
     sLog.outString( "<Ctrl-C> to stop.\n" );
@@ -159,6 +163,13 @@ extern int main(int argc, char **argv)
         clock_t pause = 3000 + clock();
 
         while (pause > clock()) {}
+    }
+
+    sLog.outDetail("%s (Library: %s)", OPENSSL_VERSION_TEXT, SSLeay_version(SSLEAY_VERSION));
+    if (SSLeay() < 0x009080bfL )
+    {
+        sLog.outDetail("WARNING: Outdated version of OpenSSL lib. Logins to server impossible!");
+        sLog.outDetail("WARNING: Minimal required version [OpenSSL 0.9.8k]");
     }
 
     /// realmd PID file creation
@@ -262,7 +273,7 @@ extern int main(int argc, char **argv)
         {
             loopCounter = 0;
             sLog.outDetail("Ping MySQL to keep connection alive");
-            delete dbRealmServer.Query("SELECT 1 FROM realmlist LIMIT 1");
+            delete loginDatabase.Query("SELECT 1 FROM realmlist LIMIT 1");
         }
 #ifdef WIN32
         if (m_ServiceStatus == 0) stopEvent = true;
@@ -271,7 +282,7 @@ extern int main(int argc, char **argv)
     }
 
     ///- Wait for the delay thread to exit
-    dbRealmServer.HaltDelayThread();
+    loginDatabase.HaltDelayThread();
 
     ///- Remove signal handling before leaving
     UnhookSignals();
@@ -310,11 +321,14 @@ bool StartDB(std::string &dbstring)
     }
 
     sLog.outString("Database: %s", dbstring.c_str() );
-    if(!dbRealmServer.Initialize(dbstring.c_str()))
+    if(!loginDatabase.Initialize(dbstring.c_str()))
     {
         sLog.outError("Cannot connect to database");
         return false;
     }
+
+    if(!loginDatabase.CheckRequiredField("realmd_db_version",REVISION_DB_REALMD))
+        return false;
 
     return true;
 }

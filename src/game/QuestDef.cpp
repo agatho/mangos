@@ -73,50 +73,50 @@ Quest::Quest(Field * questRecord)
     for (int i = 0; i < QUEST_SOURCE_ITEM_IDS_COUNT; ++i)
         ReqSourceCount[i] = questRecord[51+i].GetUInt32();
 
-    for (int i = 0; i < QUEST_SOURCE_ITEM_IDS_COUNT; ++i)
-        ReqSourceRef[i] = questRecord[55+i].GetUInt32();
+    for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+        ReqCreatureOrGOId[i] = questRecord[55+i].GetInt32();
 
     for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
-        ReqCreatureOrGOId[i] = questRecord[59+i].GetInt32();
+        ReqCreatureOrGOCount[i] = questRecord[59+i].GetUInt32();
 
     for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
-        ReqCreatureOrGOCount[i] = questRecord[63+i].GetUInt32();
-
-    for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
-        ReqSpell[i] = questRecord[67+i].GetUInt32();
+        ReqSpell[i] = questRecord[63+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
-        RewChoiceItemId[i] = questRecord[71+i].GetUInt32();
+        RewChoiceItemId[i] = questRecord[67+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
-        RewChoiceItemCount[i] = questRecord[77+i].GetUInt32();
+        RewChoiceItemCount[i] = questRecord[73+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REWARDS_COUNT; ++i)
-        RewItemId[i] = questRecord[83+i].GetUInt32();
+        RewItemId[i] = questRecord[79+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REWARDS_COUNT; ++i)
-        RewItemCount[i] = questRecord[87+i].GetUInt32();
+        RewItemCount[i] = questRecord[83+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)
-        RewRepFaction[i] = questRecord[91+i].GetUInt32();
+        RewRepFaction[i] = questRecord[87+i].GetUInt32();
 
     for (int i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)
-        RewRepValue[i] = questRecord[96+i].GetInt32();
+        RewRepValue[i] = questRecord[92+i].GetInt32();
 
-    RewHonorableKills = questRecord[101].GetUInt32();
-    RewOrReqMoney = questRecord[102].GetInt32();
-    RewMoneyMaxLevel = questRecord[103].GetUInt32();
-    RewSpell = questRecord[104].GetUInt32();
-    RewSpellCast = questRecord[105].GetUInt32();
-    RewMailTemplateId = questRecord[106].GetUInt32();
-    RewMailDelaySecs = questRecord[107].GetUInt32();
-    PointMapId = questRecord[108].GetUInt32();
-    PointX = questRecord[109].GetFloat();
-    PointY = questRecord[110].GetFloat();
-    PointOpt = questRecord[111].GetUInt32();
+    RewHonorableKills = questRecord[97].GetUInt32();
+    RewOrReqMoney = questRecord[98].GetInt32();
+    RewMoneyMaxLevel = questRecord[99].GetUInt32();
+    RewSpell = questRecord[100].GetUInt32();
+    RewSpellCast = questRecord[101].GetUInt32();
+    RewMailTemplateId = questRecord[102].GetUInt32();
+    RewMailDelaySecs = questRecord[103].GetUInt32();
+    PointMapId = questRecord[104].GetUInt32();
+    PointX = questRecord[105].GetFloat();
+    PointY = questRecord[106].GetFloat();
+    PointOpt = questRecord[107].GetUInt32();
 
     for (int i = 0; i < QUEST_EMOTE_COUNT; ++i)
-        DetailsEmote[i] = questRecord[112+i].GetUInt32();
+        DetailsEmote[i] = questRecord[108+i].GetUInt32();
+
+    for (int i = 0; i < QUEST_EMOTE_COUNT; ++i)
+        DetailsEmoteDelay[i] = questRecord[112+i].GetUInt32();
 
     IncompleteEmote = questRecord[116].GetUInt32();
     CompleteEmote = questRecord[117].GetUInt32();
@@ -124,8 +124,11 @@ Quest::Quest(Field * questRecord)
     for (int i = 0; i < QUEST_EMOTE_COUNT; ++i)
         OfferRewardEmote[i] = questRecord[118+i].GetInt32();
 
-    QuestStartScript = questRecord[122].GetUInt32();
-    QuestCompleteScript = questRecord[123].GetUInt32();
+    for (int i = 0; i < QUEST_EMOTE_COUNT; ++i)
+        OfferRewardEmoteDelay[i] = questRecord[122+i].GetInt32();
+
+    QuestStartScript = questRecord[126].GetUInt32();
+    QuestCompleteScript = questRecord[127].GetUInt32();
 
     QuestFlags |= SpecialFlags << 16;
 
@@ -134,7 +137,7 @@ Quest::Quest(Field * questRecord)
     m_rewitemscount = 0;
     m_rewchoiceitemscount = 0;
 
-    for (int i=0; i < QUEST_OBJECTIVES_COUNT; i++)
+    for (int i=0; i < QUEST_OBJECTIVES_COUNT; ++i)
     {
         if ( ReqItemId[i] )
             ++m_reqitemscount;
@@ -142,13 +145,13 @@ Quest::Quest(Field * questRecord)
             ++m_reqCreatureOrGOcount;
     }
 
-    for (int i=0; i < QUEST_REWARDS_COUNT; i++)
+    for (int i=0; i < QUEST_REWARDS_COUNT; ++i)
     {
         if ( RewItemId[i] )
             ++m_rewitemscount;
     }
 
-    for (int i=0; i < QUEST_REWARD_CHOICES_COUNT; i++)
+    for (int i=0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
     {
         if (RewChoiceItemId[i])
             ++m_rewchoiceitemscount;
@@ -164,18 +167,20 @@ uint32 Quest::XPValue( Player *pPlayer ) const
             uint32 pLevel = pPlayer->getLevel();
             uint32 qLevel = QuestLevel;
             float fullxp = 0;
-            if (qLevel >= 65)
+            if (qLevel >= 15)
                 fullxp = RewMoneyMaxLevel / 6.0f;
-            else if (qLevel == 64)
+            else if (qLevel == 14)
                 fullxp = RewMoneyMaxLevel / 4.8f;
-            else if (qLevel == 63)
-                fullxp = RewMoneyMaxLevel / 3.6f;
-            else if (qLevel == 62)
+            else if (qLevel == 13)
+                fullxp = RewMoneyMaxLevel / 3.666f;
+            else if (qLevel == 12)
                 fullxp = RewMoneyMaxLevel / 2.4f;
-            else if (qLevel == 61)
+            else if (qLevel == 11)
                 fullxp = RewMoneyMaxLevel / 1.2f;
-            else if (qLevel > 0 && qLevel <= 60)
+            else if (qLevel >= 1 && qLevel <= 10)
                 fullxp = RewMoneyMaxLevel / 0.6f;
+            else if (qLevel == 0)
+                fullxp = RewMoneyMaxLevel;
 
             if( pLevel <= qLevel +  5 )
                 return (uint32)fullxp;

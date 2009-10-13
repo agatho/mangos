@@ -21,6 +21,7 @@
 
 #include "Map.h"
 #include "InstanceSaveMgr.h"
+#include "DBCEnums.h"
 
 class MANGOS_DLL_DECL MapInstanced : public Map
 {
@@ -38,30 +39,37 @@ class MANGOS_DLL_DECL MapInstanced : public Map
         bool RemoveBones(uint64 guid, float x, float y);
         void UnloadAll(bool pForce);
 
-        Map* GetInstance(const WorldObject* obj);
-        Map* FindMap(uint32 InstanceId) { return _FindMap(InstanceId); }
+        Map* CreateInstance(const uint32 mapId, Player * player);
+        Map* FindMap(uint32 InstanceId) const { return _FindMap(InstanceId); }
         void DestroyInstance(uint32 InstanceId);
         void DestroyInstance(InstancedMaps::iterator &itr);
-        void AddGridMapReference(const GridPair &p) { ++GridMapReference[p.x_coord][p.y_coord]; }
-        void RemoveGridMapReference(const GridPair &p)
+
+        void AddGridMapReference(const GridPair &p)
+        {
+            ++GridMapReference[p.x_coord][p.y_coord];
+            SetUnloadReferenceLock(GridPair(63-p.x_coord, 63-p.y_coord), true);
+        }
+
+        void RemoveGridMapReference(GridPair const& p)
         {
             --GridMapReference[p.x_coord][p.y_coord];
-            if (!GridMapReference[p.x_coord][p.y_coord]) { SetUnloadFlag(GridPair(63-p.x_coord,63-p.y_coord), true); }
+            if (!GridMapReference[p.x_coord][p.y_coord])
+                SetUnloadReferenceLock(GridPair(63-p.x_coord, 63-p.y_coord), false);
         }
 
         InstancedMaps &GetInstancedMaps() { return m_InstancedMaps; }
+        virtual void InitVisibilityDistance();
 
     private:
 
-        InstanceMap* CreateInstance(uint32 InstanceId, InstanceSave *save, uint8 difficulty);
-        BattleGroundMap* CreateBattleGround(uint32 InstanceId);
+        InstanceMap* CreateInstance(uint32 InstanceId, InstanceSave *save, Difficulty difficulty);
+        BattleGroundMap* CreateBattleGroundMap(uint32 InstanceId, BattleGround* bg);
 
         InstancedMaps m_InstancedMaps;
 
-        Map* _FindMap(uint32 InstanceId)
+        Map* _FindMap(uint32 InstanceId) const
         {
-            InstancedMaps::iterator i = m_InstancedMaps.find(InstanceId);
-
+            InstancedMaps::const_iterator i = m_InstancedMaps.find(InstanceId);
             return(i == m_InstancedMaps.end() ? NULL : i->second);
         }
 

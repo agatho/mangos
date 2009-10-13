@@ -97,6 +97,7 @@ enum QuestStatus
     QUEST_STATUS_UNAVAILABLE    = 2,
     QUEST_STATUS_INCOMPLETE     = 3,
     QUEST_STATUS_AVAILABLE      = 4,
+    QUEST_STATUS_FAILED         = 5,
     MAX_QUEST_STATUS
 };
 
@@ -104,13 +105,15 @@ enum __QuestGiverStatus
 {
     DIALOG_STATUS_NONE                     = 0,
     DIALOG_STATUS_UNAVAILABLE              = 1,
-    DIALOG_STATUS_CHAT                     = 2,
-    DIALOG_STATUS_INCOMPLETE               = 3,
-    DIALOG_STATUS_REWARD_REP               = 4,
-    DIALOG_STATUS_AVAILABLE_REP            = 5,
-    DIALOG_STATUS_AVAILABLE                = 6,
-    DIALOG_STATUS_REWARD2                  = 7,             // not yellow dot on minimap
-    DIALOG_STATUS_REWARD                   = 8              // yellow dot on minimap
+    DIALOG_STATUS_CHAT                     = 2,             // 3.1 - may be changed
+    DIALOG_STATUS_UNK1                     = 3,             // 3.1
+    DIALOG_STATUS_UNK2                     = 4,             // 3.1
+    DIALOG_STATUS_INCOMPLETE               = 5,
+    DIALOG_STATUS_REWARD_REP               = 6,
+    DIALOG_STATUS_AVAILABLE_REP            = 7,
+    DIALOG_STATUS_AVAILABLE                = 8,
+    DIALOG_STATUS_REWARD2                  = 9,             // no yellow dot on minimap
+    DIALOG_STATUS_REWARD                   = 10             // yellow dot on minimap
 };
 
 enum __QuestFlags
@@ -123,7 +126,7 @@ enum __QuestFlags
     //QUEST_FLAGS_NONE2        = 0x00000010,                // Not used currently
     QUEST_FLAGS_EPIC           = 0x00000020,                // Not used currently: Unsure of content
     QUEST_FLAGS_RAID           = 0x00000040,                // Not used currently
-    QUEST_FLAGS_TBC            = 0x00000080,                // Not used currently: Available if TBC expension enabled only
+    QUEST_FLAGS_TBC            = 0x00000080,                // Not used currently: Available if TBC expansion enabled only
     QUEST_FLAGS_UNK2           = 0x00000100,                // Not used currently: _DELIVER_MORE Quest needs more than normal _q-item_ drops from mobs
     QUEST_FLAGS_HIDDEN_REWARDS = 0x00000200,                // Items and money rewarded only sent in SMSG_QUESTGIVER_OFFER_REWARD (not in SMSG_QUESTGIVER_QUEST_DETAILS or in client quest log(SMSG_QUEST_QUERY_RESPONSE))
     QUEST_FLAGS_AUTO_REWARDED  = 0x00000400,                // These quests are automatically rewarded on quest complete and they will never appear in quest log client side.
@@ -229,7 +232,6 @@ class Quest
         uint32 ReqItemCount[QUEST_OBJECTIVES_COUNT];
         uint32 ReqSourceId[QUEST_SOURCE_ITEM_IDS_COUNT];
         uint32 ReqSourceCount[QUEST_SOURCE_ITEM_IDS_COUNT];
-        uint32 ReqSourceRef[QUEST_SOURCE_ITEM_IDS_COUNT];
         int32  ReqCreatureOrGOId[QUEST_OBJECTIVES_COUNT];   // >0 Creature <0 Gameobject
         uint32 ReqCreatureOrGOCount[QUEST_OBJECTIVES_COUNT];
         uint32 ReqSpell[QUEST_OBJECTIVES_COUNT];
@@ -240,7 +242,9 @@ class Quest
         uint32 RewRepFaction[QUEST_REPUTATIONS_COUNT];
         int32  RewRepValue[QUEST_REPUTATIONS_COUNT];
         uint32 DetailsEmote[QUEST_EMOTE_COUNT];
+        uint32 DetailsEmoteDelay[QUEST_EMOTE_COUNT];
         uint32 OfferRewardEmote[QUEST_EMOTE_COUNT];
+        uint32 OfferRewardEmoteDelay[QUEST_EMOTE_COUNT];
 
         uint32 GetReqItemsCount() const { return m_reqitemscount; }
         uint32 GetReqCreatureOrGOcount() const { return m_reqCreatureOrGOcount; }

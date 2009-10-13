@@ -29,7 +29,8 @@ enum LogFilters
 {
     LOG_FILTER_TRANSPORT_MOVES    = 1,
     LOG_FILTER_CREATURE_MOVES     = 2,
-    LOG_FILTER_VISIBILITY_CHANGES = 4
+    LOG_FILTER_VISIBILITY_CHANGES = 4,
+    LOG_FILTER_ACHIEVEMENT_UPDATES= 8
 };
 
 enum Color
@@ -53,7 +54,7 @@ enum Color
 
 const int Color_count = int(WHITE)+1;
 
-class Log : public MaNGOS::Singleton<Log, MaNGOS::ClassLevelLockable<Log, ZThread::FastMutex> >
+class Log : public MaNGOS::Singleton<Log, MaNGOS::ClassLevelLockable<Log, ACE_Thread_Mutex> >
 {
     friend class MaNGOS::OperatorNew<Log>;
     Log();

@@ -22,7 +22,6 @@
 #include "WorldSession.h"
 #include "Opcodes.h"
 #include "Log.h"
-#include "World.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "UpdateMask.h"
@@ -30,12 +29,8 @@
 #include "WaypointMovementGenerator.h"
 #include "DestinationHolderImp.h"
 
-#include <cassert>
-
 void WorldSession::HandleTaxiNodeStatusQueryOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,8);
-
     sLog.outDebug( "WORLD: Received CMSG_TAXINODE_STATUS_QUERY" );
 
     uint64 guid;
@@ -47,14 +42,14 @@ void WorldSession::HandleTaxiNodeStatusQueryOpcode( WorldPacket & recv_data )
 void WorldSession::SendTaxiStatus( uint64 guid )
 {
     // cheating checks
-    Creature *unit = ObjectAccessor::GetCreature(*_player, guid);
+    Creature *unit = GetPlayer()->GetMap()->GetCreature(guid);
     if (!unit)
     {
         sLog.outDebug( "WorldSession::SendTaxiStatus - Unit (GUID: %u) not found.", uint32(GUID_LOPART(guid)) );
         return;
     }
 
-    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId());
+    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId(),GetPlayer( )->GetTeam());
 
     // not found nearest
     if(curloc == 0)
@@ -71,15 +66,13 @@ void WorldSession::SendTaxiStatus( uint64 guid )
 
 void WorldSession::HandleTaxiQueryAvailableNodes( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,8);
-
     sLog.outDebug( "WORLD: Received CMSG_TAXIQUERYAVAILABLENODES" );
 
     uint64 guid;
     recv_data >> guid;
 
     // cheating checks
-    Creature *unit = ObjectAccessor::GetNPCIfCanInteractWith(*_player, guid, UNIT_NPC_FLAG_FLIGHTMASTER);
+    Creature *unit = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_FLIGHTMASTER);
     if (!unit)
     {
         sLog.outDebug( "WORLD: HandleTaxiQueryAvailableNodes - Unit (GUID: %u) not found or you can't interact with him.", uint32(GUID_LOPART(guid)) );
@@ -101,7 +94,7 @@ void WorldSession::HandleTaxiQueryAvailableNodes( WorldPacket & recv_data )
 void WorldSession::SendTaxiMenu( Creature* unit )
 {
     // find current node
-    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId());
+    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId(),GetPlayer( )->GetTeam());
 
     if ( curloc == 0 )
         return;
@@ -118,23 +111,25 @@ void WorldSession::SendTaxiMenu( Creature* unit )
     sLog.outDebug( "WORLD: Sent SMSG_SHOWTAXINODES" );
 }
 
-void WorldSession::SendDoFlight( uint16 MountId, uint32 path, uint32 pathNode )
+void WorldSession::SendDoFlight( uint32 mountDisplayId, uint32 path, uint32 pathNode )
 {
     // remove fake death
-    if(GetPlayer()->hasUnitState(UNIT_STAT_DIED))
+    if (GetPlayer()->hasUnitState(UNIT_STAT_DIED))
         GetPlayer()->RemoveSpellsCausingAura(SPELL_AURA_FEIGN_DEATH);
 
     while(GetPlayer()->GetMotionMaster()->GetCurrentMovementGeneratorType()==FLIGHT_MOTION_TYPE)
         GetPlayer()->GetMotionMaster()->MovementExpired(false);
 
-    GetPlayer()->Mount( MountId );
+    if (mountDisplayId)
+        GetPlayer()->Mount( mountDisplayId );
+
     GetPlayer()->GetMotionMaster()->MoveTaxiFlight(path,pathNode);
 }
 
 bool WorldSession::SendLearnNewTaxiNode( Creature* unit )
 {
     // find current node
-    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId());
+    uint32 curloc = objmgr.GetNearestTaxiNode(unit->GetPositionX(),unit->GetPositionY(),unit->GetPositionZ(),unit->GetMapId(),GetPlayer( )->GetTeam());
 
     if ( curloc == 0 )
         return true;                                        // `true` send to avoid WorldSession::SendTaxiMenu call with one more curlock seartch with same false result.
@@ -155,26 +150,21 @@ bool WorldSession::SendLearnNewTaxiNode( Creature* unit )
         return false;
 }
 
-void WorldSession::HandleActivateTaxiFarOpcode ( WorldPacket & recv_data )
+void WorldSession::HandleActivateTaxiExpressOpcode ( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,8+4+4);
-
     sLog.outDebug( "WORLD: Received CMSG_ACTIVATETAXIEXPRESS" );
 
     uint64 guid;
-    uint32 node_count, _totalcost;
+    uint32 node_count;
 
-    recv_data >> guid >> _totalcost >> node_count;
+    recv_data >> guid >> node_count;
 
-    Creature *npc = ObjectAccessor::GetNPCIfCanInteractWith(*_player, guid, UNIT_NPC_FLAG_FLIGHTMASTER);
+    Creature *npc = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_FLIGHTMASTER);
     if (!npc)
     {
-        sLog.outDebug( "WORLD: HandleActivateTaxiFarOpcode - Unit (GUID: %u) not found or you can't interact with it.", uint32(GUID_LOPART(guid)) );
+        sLog.outDebug( "WORLD: HandleActivateTaxiExpressOpcode - Unit (GUID: %u) not found or you can't interact with it.", uint32(GUID_LOPART(guid)) );
         return;
     }
-    // recheck
-    CHECK_PACKET_SIZE(recv_data,8+4+4+node_count*4);
-
     std::vector<uint32> nodes;
 
     for(uint32 i = 0; i < node_count; ++i)
@@ -189,10 +179,10 @@ void WorldSession::HandleActivateTaxiFarOpcode ( WorldPacket & recv_data )
 
     sLog.outDebug( "WORLD: Received CMSG_ACTIVATETAXIEXPRESS from %d to %d" ,nodes.front(),nodes.back());
 
-    GetPlayer()->ActivateTaxiPathTo(nodes, 0, npc);
+    GetPlayer()->ActivateTaxiPathTo(nodes, npc);
 }
 
-void WorldSession::HandleTaxiNextDestinationOpcode(WorldPacket& /*recv_data*/)
+void WorldSession::HandleMoveSplineDoneOpcode(WorldPacket& /*recv_data*/)
 {
     sLog.outDebug( "WORLD: Received CMSG_MOVE_SPLINE_DONE" );
 
@@ -241,13 +231,13 @@ void WorldSession::HandleTaxiNextDestinationOpcode(WorldPacket& /*recv_data*/)
 
         sLog.outDebug( "WORLD: Taxi has to go from %u to %u", sourcenode, destinationnode );
 
-        uint16 MountId = objmgr.GetTaxiMount(sourcenode, GetPlayer()->GetTeam());
+        uint32 mountDisplayId = objmgr.GetTaxiMountDisplayId(sourcenode, GetPlayer()->GetTeam());
 
         uint32 path, cost;
         objmgr.GetTaxiPath( sourcenode, destinationnode, path, cost);
 
-        if(path && MountId)
-            SendDoFlight( MountId, path, 1 );               // skip start fly node
+        if(path && mountDisplayId)
+            SendDoFlight( mountDisplayId, path, 1 );        // skip start fly node
         else
             GetPlayer()->m_taxi.ClearTaxiDestinations();    // clear problematic path and next
     }
@@ -257,8 +247,6 @@ void WorldSession::HandleTaxiNextDestinationOpcode(WorldPacket& /*recv_data*/)
 
 void WorldSession::HandleActivateTaxiOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,8+4+4);
-
     sLog.outDebug( "WORLD: Received CMSG_ACTIVATETAXI" );
 
     uint64 guid;
@@ -267,12 +255,12 @@ void WorldSession::HandleActivateTaxiOpcode( WorldPacket & recv_data )
 
     recv_data >> guid >> nodes[0] >> nodes[1];
     sLog.outDebug( "WORLD: Received CMSG_ACTIVATETAXI from %d to %d" ,nodes[0],nodes[1]);
-    Creature *npc = ObjectAccessor::GetNPCIfCanInteractWith(*_player, guid, UNIT_NPC_FLAG_FLIGHTMASTER);
+    Creature *npc = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_FLIGHTMASTER);
     if (!npc)
     {
         sLog.outDebug( "WORLD: HandleActivateTaxiOpcode - Unit (GUID: %u) not found or you can't interact with it.", uint32(GUID_LOPART(guid)) );
         return;
     }
 
-    GetPlayer()->ActivateTaxiPathTo(nodes, 0, npc);
+    GetPlayer()->ActivateTaxiPathTo(nodes, npc);
 }

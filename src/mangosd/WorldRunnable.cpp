@@ -25,8 +25,8 @@
 #include "World.h"
 #include "WorldRunnable.h"
 #include "Timer.h"
-#include "ObjectAccessor.h"
 #include "MapManager.h"
+#include "BattleGroundMgr.h"
 
 #include "Database/DatabaseEnv.h"
 
@@ -34,6 +34,11 @@
 #define WORLD_SLEEP_CONST 50
 #else
 #define WORLD_SLEEP_CONST 100                               //Is this still needed?? [On linux some time ago not working 50ms]
+#endif
+
+#ifdef WIN32
+#include "ServiceWin32.h"
+extern int m_ServiceStatus;
 #endif
 
 /// Heartbeat for the World
@@ -66,14 +71,22 @@ void WorldRunnable::run()
         if (diff <= WORLD_SLEEP_CONST+prevSleepTime)
         {
             prevSleepTime = WORLD_SLEEP_CONST+prevSleepTime-diff;
-            ZThread::Thread::sleep(prevSleepTime);
+            ACE_Based::Thread::Sleep(prevSleepTime);
         }
         else
             prevSleepTime = 0;
+
+        #ifdef WIN32
+            if (m_ServiceStatus == 0) World::StopNow(SHUTDOWN_EXIT_CODE);
+            while (m_ServiceStatus == 2) Sleep(1000);
+        #endif
     }
 
     sWorld.KickAll();                                       // save and kick all players
     sWorld.UpdateSessions( 1 );                             // real players unload required UpdateSessions call
+
+    // unload battleground templates before different singletons destroyed
+    sBattleGroundMgr.DeleteAllBattleGrounds();
 
     sWorldSocketMgr->StopNetwork();
 

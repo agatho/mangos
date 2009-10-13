@@ -32,7 +32,6 @@
 #include "ItemPrototype.h"
 #include "NPCHandler.h"
 #include "Database/DatabaseEnv.h"
-#include "AuctionHouseObject.h"
 #include "Mail.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -96,6 +95,21 @@ extern ScriptMapMap sSpellScripts;
 extern ScriptMapMap sGameObjectScripts;
 extern ScriptMapMap sEventScripts;
 
+struct SpellClickInfo
+{
+    uint32 spellId;
+    uint32 questStart;                                      // quest start (quest must be active or rewarded for spell apply)
+    uint32 questEnd;                                        // quest end (quest don't must be rewarded for spell apply)
+    bool   questStartCanActive;                             // if true then quest start can be active (not only rewarded)
+    uint8 castFlags;
+
+    // helpers
+    bool IsFitToRequirements(Player const* player) const;
+};
+
+typedef std::multimap<uint32, SpellClickInfo> SpellClickInfoMap;
+typedef std::pair<SpellClickInfoMap::const_iterator,SpellClickInfoMap::const_iterator> SpellClickInfoMapBounds;
+
 struct AreaTrigger
 {
     uint8  requiredLevel;
@@ -104,6 +118,7 @@ struct AreaTrigger
     uint32 heroicKey;
     uint32 heroicKey2;
     uint32 requiredQuest;
+    uint32 requiredQuestHeroic;
     std::string requiredFailedText;
     uint32 target_mapId;
     float  target_X;
@@ -127,10 +142,12 @@ typedef UNORDERED_MAP<uint64/*(instance,guid) pair*/,time_t> RespawnTimes;
 
 
 // mangos string ranges
-#define MIN_MANGOS_STRING_ID    1
-#define MAX_MANGOS_STRING_ID    2000000000
-#define MIN_DB_SCRIPT_STRING_ID MAX_MANGOS_STRING_ID
-#define MAX_DB_SCRIPT_STRING_ID 2000010000
+#define MIN_MANGOS_STRING_ID           1                    // 'mangos_string'
+#define MAX_MANGOS_STRING_ID           2000000000
+#define MIN_DB_SCRIPT_STRING_ID        MAX_MANGOS_STRING_ID // 'db_script_string'
+#define MAX_DB_SCRIPT_STRING_ID        2000010000
+#define MIN_CREATURE_AI_TEXT_STRING_ID (-1)                 // 'creature_ai_texts'
+#define MAX_CREATURE_AI_TEXT_STRING_ID (-1000000)
 
 struct MangosStringLocale
 {
@@ -145,10 +162,13 @@ typedef UNORDERED_MAP<uint32,ItemLocale> ItemLocaleMap;
 typedef UNORDERED_MAP<uint32,QuestLocale> QuestLocaleMap;
 typedef UNORDERED_MAP<uint32,NpcTextLocale> NpcTextLocaleMap;
 typedef UNORDERED_MAP<uint32,PageTextLocale> PageTextLocaleMap;
-typedef UNORDERED_MAP<uint32,MangosStringLocale> MangosStringLocaleMap;
+typedef UNORDERED_MAP<int32,MangosStringLocale> MangosStringLocaleMap;
 typedef UNORDERED_MAP<uint32,NpcOptionLocale> NpcOptionLocaleMap;
+typedef UNORDERED_MAP<uint32,PointOfInterestLocale> PointOfInterestLocaleMap;
 
 typedef std::multimap<uint32,uint32> QuestRelations;
+typedef std::multimap<uint32,ItemRequiredTarget> ItemRequiredTargetMap;
+typedef std::pair<ItemRequiredTargetMap::const_iterator, ItemRequiredTargetMap::const_iterator>  ItemRequiredTargetMapBounds;
 
 struct PetLevelInfo
 {
@@ -173,9 +193,15 @@ struct ReputationOnKillEntry
     bool team_dependent;
 };
 
-struct PetCreateSpellEntry
+struct PointOfInterest
 {
-    uint32 spellid[4];
+    uint32 entry;
+    float x;
+    float y;
+    uint32 icon;
+    uint32 flags;
+    uint32 data;
+    std::string icon_name;
 };
 
 #define WEATHER_SEASONS 4
@@ -210,7 +236,7 @@ enum ConditionType
     CONDITION_SKILL                 = 7,                    // skill_id     skill_value
     CONDITION_QUESTREWARDED         = 8,                    // quest_id     0
     CONDITION_QUESTTAKEN            = 9,                    // quest_id     0,      for condition true while quest active.
-    CONDITION_AD_COMMISSION_AURA    = 10,                   // 0            0,      for condition true while one from AD ñommission aura active
+    CONDITION_AD_COMMISSION_AURA    = 10,                   // 0            0,      for condition true while one from AD commission aura active
     CONDITION_NO_AURA               = 11,                   // spell_id     effindex
     CONDITION_ACTIVE_EVENT          = 12,                   // event_id
 };
@@ -253,8 +279,10 @@ enum SkillRangeType
 
 SkillRangeType GetSkillRangeType(SkillLineEntry const *pSkill, bool racial);
 
-#define MAX_PLAYER_NAME 12                                  // max allowed by client name length
+#define MAX_PLAYER_NAME          12                         // max allowed by client name length
 #define MAX_INTERNAL_PLAYER_NAME 15                         // max server internal player name length ( > MAX_PLAYER_NAME for support declined names )
+#define MAX_PET_NAME             12                         // max allowed by client name length
+#define MAX_CHARTER_NAME         24                         // max allowed by client name length
 
 bool normalizePlayerName(std::string& name);
 
@@ -281,9 +309,10 @@ class ObjectMgr
         typedef UNORDERED_MAP<uint32, Item*> ItemMap;
 
         typedef std::set< Group * > GroupSet;
-        typedef std::set< Guild * > GuildSet;
 
-        typedef UNORDERED_MAP<uint32, ArenaTeam* > ArenaTeamMap;
+        typedef UNORDERED_MAP<uint32, Guild *> GuildMap;
+
+        typedef UNORDERED_MAP<uint32, ArenaTeam*> ArenaTeamMap;
 
         typedef UNORDERED_MAP<uint32, Quest*> QuestMap;
 
@@ -292,10 +321,9 @@ class ObjectMgr
         typedef UNORDERED_MAP<uint32, uint32> AreaTriggerScriptMap;
 
         typedef UNORDERED_MAP<uint32, ReputationOnKillEntry> RepOnKillMap;
+        typedef UNORDERED_MAP<uint32, PointOfInterest> PointOfInterestMap;
 
         typedef UNORDERED_MAP<uint32, WeatherZoneChances> WeatherZoneMap;
-
-        typedef UNORDERED_MAP<uint32, PetCreateSpellEntry> PetCreateSpellMap;
 
         typedef std::vector<std::string> ScriptNameMap;
 
@@ -312,17 +340,17 @@ class ObjectMgr
         void RemoveGroup(Group* group) { mGroupSet.erase( group ); }
 
         Guild* GetGuildByLeader(uint64 const&guid) const;
-        Guild* GetGuildById(const uint32 GuildId) const;
+        Guild* GetGuildById(uint32 GuildId) const;
         Guild* GetGuildByName(const std::string& guildname) const;
-        std::string GetGuildNameById(const uint32 GuildId) const;
-        void AddGuild(Guild* guild) { mGuildSet.insert( guild ); }
-        void RemoveGuild(Guild* guild) { mGuildSet.erase( guild ); }
+        std::string GetGuildNameById(uint32 GuildId) const;
+        void AddGuild(Guild* guild);
+        void RemoveGuild(uint32 Id);
 
-        ArenaTeam* GetArenaTeamById(const uint32 arenateamid) const;
+        ArenaTeam* GetArenaTeamById(uint32 arenateamid) const;
         ArenaTeam* GetArenaTeamByName(const std::string& arenateamname) const;
         ArenaTeam* GetArenaTeamByCaptain(uint64 const& guid) const;
         void AddArenaTeam(ArenaTeam* arenaTeam);
-        void RemoveArenaTeam(ArenaTeam* arenaTeam);
+        void RemoveArenaTeam(uint32 Id);
         ArenaTeamMap::iterator GetArenaTeamMapBegin() { return mArenaTeamMap.begin(); }
         ArenaTeamMap::iterator GetArenaTeamMapEnd()   { return mArenaTeamMap.end(); }
 
@@ -347,42 +375,6 @@ class ObjectMgr
         {
             return sInstanceTemplate.LookupEntry<InstanceTemplate>(map);
         }
-
-        Item* GetAItem(uint32 id)
-        {
-            ItemMap::const_iterator itr = mAitems.find(id);
-            if (itr != mAitems.end())
-            {
-                return itr->second;
-            }
-            return NULL;
-        }
-        void AddAItem(Item* it)
-        {
-            ASSERT( it );
-            ASSERT( mAitems.find(it->GetGUIDLow()) == mAitems.end());
-            mAitems[it->GetGUIDLow()] = it;
-        }
-        bool RemoveAItem(uint32 id)
-        {
-            ItemMap::iterator i = mAitems.find(id);
-            if (i == mAitems.end())
-            {
-                return false;
-            }
-            mAitems.erase(i);
-            return true;
-        }
-        AuctionHouseObject * GetAuctionsMap( uint32 location );
-
-        //auction messages
-        void SendAuctionWonMail( AuctionEntry * auction );
-        void SendAuctionSalePendingMail( AuctionEntry * auction );
-        void SendAuctionSuccessfulMail( AuctionEntry * auction );
-        void SendAuctionExpiredMail( AuctionEntry * auction );
-        static uint32 GetAuctionCut( uint32 location, uint32 highBid );
-        static uint32 GetAuctionDeposit(uint32 location, uint32 time, Item *pItem);
-        static uint32 GetAuctionOutBid(uint32 currentBid);
 
         PetLevelInfo const* GetPetLevelInfo(uint32 creature_id, uint32 level) const;
 
@@ -409,9 +401,9 @@ class ObjectMgr
         uint32 GetPlayerAccountIdByGUID(const uint64 &guid) const;
         uint32 GetPlayerAccountIdByPlayerName(const std::string& name) const;
 
-        uint32 GetNearestTaxiNode( float x, float y, float z, uint32 mapid );
+        uint32 GetNearestTaxiNode( float x, float y, float z, uint32 mapid, uint32 team );
         void GetTaxiPath( uint32 source, uint32 destination, uint32 &path, uint32 &cost);
-        uint16 GetTaxiMount( uint32 id, uint32 team );
+        uint32 GetTaxiMountDisplayId( uint32 id, uint32 team, bool allowed_alt_team = false);
         void GetTaxiPathNodes( uint32 path, Path &pathnodes, std::vector<uint32>& mapIds );
         void GetTransportPathNodes( uint32 path, TransportPath &pathnodes );
 
@@ -429,26 +421,17 @@ class ObjectMgr
                 return itr->second;
             return 0;
         }
-        bool IsTavernAreaTrigger(uint32 Trigger_ID) const { return mTavernAreaTriggerSet.count(Trigger_ID) != 0; }
-        bool IsGameObjectForQuests(uint32 entry) const { return mGameObjectForQuestSet.count(entry) != 0; }
-        bool IsGuildVaultGameObject(Player *player, uint64 guid) const
+        bool IsTavernAreaTrigger(uint32 Trigger_ID) const
         {
-            if(GameObject *go = ObjectAccessor::GetGameObject(*player, guid))
-                if(go->GetGoType() == GAMEOBJECT_TYPE_GUILD_BANK)
-                    return true;
-            return false;
+            return mTavernAreaTriggerSet.find(Trigger_ID) != mTavernAreaTriggerSet.end();
         }
 
-        uint32 GetBattleMasterBG(uint32 entry) const
+        bool IsGameObjectForQuests(uint32 entry) const
         {
-            BattleMastersMap::const_iterator itr = mBattleMastersMap.find(entry);
-            if(itr != mBattleMastersMap.end())
-                return itr->second;
-            return 2;                                       //BATTLEGROUND_WS - i will not add include only for constant usage!
+            return mGameObjectForQuestSet.find(entry) != mGameObjectForQuestSet.end();
         }
 
-        void AddGossipText(GossipText *pGText);
-        GossipText *GetGossipText(uint32 Text_ID);
+        GossipText const* GetGossipText(uint32 Text_ID) const;
 
         WorldSafeLocsEntry const *GetClosestGraveYard(float x, float y, float z, uint32 MapId, uint32 team);
         bool AddGraveYardLink(uint32 id, uint32 zone, uint32 team, bool inDB = true);
@@ -476,10 +459,10 @@ class ObjectMgr
             return NULL;
         }
 
-        PetCreateSpellEntry const* GetPetCreateSpellEntry(uint32 id) const
+        PointOfInterest const* GetPointOfInterest(uint32 id) const
         {
-            PetCreateSpellMap::const_iterator itr = mPetCreateSpell.find(id);
-            if(itr != mPetCreateSpell.end())
+            PointOfInterestMap::const_iterator itr = mPointsOfInterest.find(id);
+            if(itr != mPointsOfInterest.end())
                 return &itr->second;
             return NULL;
         }
@@ -514,7 +497,6 @@ class ObjectMgr
         bool LoadMangosStrings(DatabaseType& db, char const* table, int32 min_value, int32 max_value);
         bool LoadMangosStrings() { return LoadMangosStrings(WorldDatabase,"mangos_string",MIN_MANGOS_STRING_ID,MAX_MANGOS_STRING_ID); }
         void LoadDbScriptStrings();
-        void LoadPetCreateSpells();
         void LoadCreatureLocales();
         void LoadCreatureTemplates();
         void LoadCreatures();
@@ -526,11 +508,13 @@ class ObjectMgr
         void LoadGameobjects();
         void LoadGameobjectRespawnTimes();
         void LoadItemPrototypes();
+        void LoadItemRequiredTarget();
         void LoadItemLocales();
         void LoadQuestLocales();
         void LoadNpcTextLocales();
         void LoadPageTextLocales();
         void LoadNpcOptionLocales();
+        void LoadPointOfInterestLocales();
         void LoadInstanceTemplate();
 
         void LoadGossipText();
@@ -539,15 +523,11 @@ class ObjectMgr
         void LoadQuestAreaTriggers();
         void LoadAreaTriggerScripts();
         void LoadTavernAreaTriggers();
-        void LoadBattleMastersEntry();
         void LoadGameObjectForQuests();
 
         void LoadItemTexts();
         void LoadPageTexts();
 
-        //load first auction items, because of check if item exists, when loading
-        void LoadAuctionItems();
-        void LoadAuctions();
         void LoadPlayerInfo();
         void LoadPetLevelInfo();
         void LoadExplorationBaseXP();
@@ -557,6 +537,9 @@ class ObjectMgr
         void LoadFishingBaseSkillLevel();
 
         void LoadReputationOnKill();
+        void LoadPointsOfInterest();
+
+        void LoadNPCSpellClickSpells();
 
         void LoadWeatherZoneChances();
         void LoadGameTele();
@@ -568,6 +551,7 @@ class ObjectMgr
 
         std::string GeneratePetName(uint32 entry);
         uint32 GetBaseXP(uint32 level);
+        uint32 GetXPForLevel(uint32 level);
 
         int32 GetFishingBaseSkillLevel(uint32 entry) const
         {
@@ -579,14 +563,16 @@ class ObjectMgr
 
         void SetHighestGuids();
         uint32 GenerateLowGuid(HighGuid guidhigh);
-        uint32 GenerateAuctionID();
-        uint32 GenerateMailID();
-        uint32 GenerateItemTextID();
-        uint32 GeneratePetNumber();
         uint32 GenerateArenaTeamId();
+        uint32 GenerateAuctionID();
+        uint64 GenerateEquipmentSetGuid();
         uint32 GenerateGuildId();
+        uint32 GenerateItemTextID();
+        uint32 GenerateMailID();
+        uint32 GeneratePetNumber();
 
         uint32 CreateItemText(std::string text);
+        void AddItemText(uint32 itemTextId, std::string text) { mItemTexts[itemTextId] = text; }
         std::string GetItemText( uint32 id )
         {
             ItemTextMap::const_iterator itr = mItemTexts.find( id );
@@ -663,6 +649,12 @@ class ObjectMgr
             if(itr==mNpcOptionLocaleMap.end()) return NULL;
             return &itr->second;
         }
+        PointOfInterestLocale const* GetPointOfInterestLocale(uint32 poi_id) const
+        {
+            PointOfInterestLocaleMap::const_iterator itr = mPointOfInterestLocaleMap.find(poi_id);
+            if(itr==mPointOfInterestLocaleMap.end()) return NULL;
+            return &itr->second;
+        }
 
         GameObjectData const* GetGOData(uint32 guid) const
         {
@@ -701,22 +693,17 @@ class ObjectMgr
 
         // reserved names
         void LoadReservedPlayersNames();
-        bool IsReservedName(const std::string& name) const
-        {
-            return m_ReservedNames.find(name) != m_ReservedNames.end();
-        }
+        bool IsReservedName(const std::string& name) const;
 
         // name with valid structure and symbols
-        static bool IsValidName( const std::string& name, bool create = false );
+        static uint8 CheckPlayerName( const std::string& name, bool create = false );
+        static PetNameInvalidReason CheckPetName( const std::string& name );
         static bool IsValidCharterName( const std::string& name );
-        static bool IsValidPetName( const std::string& name );
 
         static bool CheckDeclinedNames(std::wstring mainpart, DeclinedName const& names);
 
         int GetIndexForLocale(LocaleConstant loc);
         LocaleConstant GetLocaleForIndex(int i);
-        // guild bank tabs
-        uint32 GetGuildBankTabPrice(uint8 Index) const { return Index < GUILD_BANK_MAX_TABS ? mGuildBankTabPrice[Index] : 0; }
 
         uint16 GetConditionId(ConditionType condition, uint32 value1, uint32 value2);
         bool IsPlayerMeetToCondition(Player const* player, uint16 condition_id) const
@@ -776,14 +763,26 @@ class ObjectMgr
         uint32 GetScriptId(const char *name);
 
         int GetOrNewIndexForLocale(LocaleConstant loc);
+
+        SpellClickInfoMapBounds GetSpellClickInfoMapBounds(uint32 creature_id) const
+        {
+            return SpellClickInfoMapBounds(mSpellClickInfoMap.lower_bound(creature_id),mSpellClickInfoMap.upper_bound(creature_id));
+        }
+
+        ItemRequiredTargetMapBounds GetItemRequiredTargetMapBounds(uint32 uiItemEntry) const
+        {
+            return ItemRequiredTargetMapBounds(m_ItemRequiredTarget.lower_bound(uiItemEntry),m_ItemRequiredTarget.upper_bound(uiItemEntry));
+        }
+
     protected:
 
         // first free id for selected id type
-        uint32 m_auctionid;
-        uint32 m_mailid;
-        uint32 m_ItemTextId;
         uint32 m_arenaTeamId;
+        uint32 m_auctionid;
+        uint64 m_equipmentSetGuid;
         uint32 m_guildId;
+        uint32 m_ItemTextId;
+        uint32 m_mailid;
         uint32 m_hiPetNumber;
 
         // first free low guid for seelcted guid type
@@ -798,28 +797,19 @@ class ObjectMgr
 
         QuestMap            mQuestTemplates;
 
-        typedef UNORDERED_MAP<uint32, GossipText*> GossipTextMap;
+        typedef UNORDERED_MAP<uint32, GossipText> GossipTextMap;
         typedef UNORDERED_MAP<uint32, uint32> QuestAreaTriggerMap;
-        typedef UNORDERED_MAP<uint32, uint32> BattleMastersMap;
         typedef UNORDERED_MAP<uint32, std::string> ItemTextMap;
         typedef std::set<uint32> TavernAreaTriggerSet;
         typedef std::set<uint32> GameObjectForQuestSet;
 
         GroupSet            mGroupSet;
-        GuildSet            mGuildSet;
+        GuildMap            mGuildMap;
         ArenaTeamMap        mArenaTeamMap;
-
-        ItemMap             mItems;
-        ItemMap             mAitems;
 
         ItemTextMap         mItemTexts;
 
-        AuctionHouseObject  mHordeAuctions;
-        AuctionHouseObject  mAllianceAuctions;
-        AuctionHouseObject  mNeutralAuctions;
-
         QuestAreaTriggerMap mQuestAreaTriggerMap;
-        BattleMastersMap    mBattleMastersMap;
         TavernAreaTriggerSet mTavernAreaTriggerSet;
         GameObjectForQuestSet mGameObjectForQuestSet;
         GossipTextMap       mGossipText;
@@ -828,12 +818,12 @@ class ObjectMgr
 
         RepOnKillMap        mRepOnKill;
 
+        PointOfInterestMap mPointsOfInterest;
+
         WeatherZoneMap      mWeatherZoneMap;
 
-        PetCreateSpellMap   mPetCreateSpell;
-
         //character reserved names
-        typedef std::set<std::string> ReservedNamesMap;
+        typedef std::set<std::wstring> ReservedNamesMap;
         ReservedNamesMap    m_ReservedNames;
 
         GraveYardMap        mGraveYardMap;
@@ -841,6 +831,10 @@ class ObjectMgr
         GameTeleMap         m_GameTeleMap;
 
         ScriptNameMap       m_scriptNames;
+
+        SpellClickInfoMap   mSpellClickInfoMap;
+
+        ItemRequiredTargetMap m_ItemRequiredTarget;
 
         typedef             std::vector<LocaleConstant> LocalForIndex;
         LocalForIndex        m_LocalForIndex;
@@ -850,6 +844,7 @@ class ObjectMgr
     private:
         void LoadScripts(ScriptMapMap& scripts, char const* tablename);
         void CheckScripts(ScriptMapMap const& scripts,std::set<int32>& ids);
+        void LoadCreatureAddons(SQLStorage& creatureaddons, char const* entryName, char const* comment);
         void ConvertCreatureAddonAuras(CreatureDataAddon* addon, char const* table, char const* guidEntryStr);
         void LoadQuestRelationsHelper(QuestRelations& map,char const* table);
 
@@ -861,6 +856,9 @@ class ObjectMgr
 
         void BuildPlayerLevelInfo(uint8 race, uint8 class_, uint8 level, PlayerLevelInfo* plinfo) const;
         PlayerInfo playerInfo[MAX_RACES][MAX_CLASSES];
+
+        typedef std::vector<uint32> PlayerXPperLevel;       // [level]
+        PlayerXPperLevel mPlayerXPperLevel;
 
         typedef std::map<uint32,uint32> BaseXPMap;          // [area level][base xp]
         BaseXPMap mBaseXPTable;
@@ -883,11 +881,9 @@ class ObjectMgr
         PageTextLocaleMap mPageTextLocaleMap;
         MangosStringLocaleMap mMangosStringLocaleMap;
         NpcOptionLocaleMap mNpcOptionLocaleMap;
+        PointOfInterestLocaleMap mPointOfInterestLocaleMap;
         RespawnTimes mCreatureRespawnTimes;
         RespawnTimes mGORespawnTimes;
-
-        typedef std::vector<uint32> GuildBankTabPriceMap;
-        GuildBankTabPriceMap mGuildBankTabPrice;
 
         // Storage for Conditions. First element (index 0) is reserved for zero-condition (nothing required)
         typedef std::vector<PlayerCondition> ConditionStore;
@@ -902,9 +898,11 @@ class ObjectMgr
 #define objmgr MaNGOS::Singleton<ObjectMgr>::Instance()
 
 // scripting access functions
-MANGOS_DLL_SPEC bool LoadMangosStrings(DatabaseType& db, char const* table,int32 start_value = -1, int32 end_value = std::numeric_limits<int32>::min());
+MANGOS_DLL_SPEC bool LoadMangosStrings(DatabaseType& db, char const* table,int32 start_value = MAX_CREATURE_AI_TEXT_STRING_ID, int32 end_value = std::numeric_limits<int32>::min());
 MANGOS_DLL_SPEC uint32 GetAreaTriggerScriptId(uint32 trigger_id);
 MANGOS_DLL_SPEC uint32 GetScriptId(const char *name);
 MANGOS_DLL_SPEC ObjectMgr::ScriptNameMap& GetScriptNames();
+MANGOS_DLL_SPEC CreatureInfo const* GetCreatureTemplateStore(uint32 entry);
+MANGOS_DLL_SPEC Quest const* GetQuestTemplateStore(uint32 entry);
 
 #endif

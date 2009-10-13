@@ -24,11 +24,9 @@
 #include "Policies/SingletonImp.h"
 #include "Config/ConfigEnv.h"
 
-#define CLASS_LOCK MaNGOS::ClassLevelLockable<WorldLog, ZThread::FastMutex>
+#define CLASS_LOCK MaNGOS::ClassLevelLockable<WorldLog, ACE_Thread_Mutex>
 INSTANTIATE_SINGLETON_2(WorldLog, CLASS_LOCK);
-INSTANTIATE_CLASS_MUTEX(WorldLog, ZThread::FastMutex);
-
-#define WORLD_LOG_FILE_STRING   "world.log"
+INSTANTIATE_CLASS_MUTEX(WorldLog, ACE_Thread_Mutex);
 
 /// Open the log file (if specified so in the configuration file)
 void WorldLog::Initialize()

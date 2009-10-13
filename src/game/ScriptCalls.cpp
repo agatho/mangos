@@ -72,8 +72,10 @@ bool LoadScriptingModule(char const* libName)
         ||!(testScript->scriptAreaTrigger   =(scriptCallAreaTrigger         )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"AreaTrigger"         ))
         ||!(testScript->ItemQuestAccept     =(scriptCallItemQuestAccept     )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"ItemQuestAccept"     ))
         ||!(testScript->GOQuestAccept       =(scriptCallGOQuestAccept       )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"GOQuestAccept"       ))
-        ||!(testScript->ReceiveEmote        =(scriptCallReceiveEmote        )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"ReceiveEmote"        ))
         ||!(testScript->ItemUse             =(scriptCallItemUse             )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"ItemUse"             ))
+        ||!(testScript->EffectDummyGameObj  =(scriptCallEffectDummyGameObj  )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"EffectDummyGameObj"  ))
+        ||!(testScript->EffectDummyCreature =(scriptCallEffectDummyCreature )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"EffectDummyCreature" ))
+        ||!(testScript->EffectDummyItem     =(scriptCallEffectDummyItem     )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"EffectDummyItem"     ))
         ||!(testScript->GetAI               =(scriptCallGetAI               )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"GetAI"               ))
         ||!(testScript->CreateInstanceData  =(scriptCallCreateInstanceData  )MANGOS_GET_PROC_ADDR(testScript->hScriptsLib,"CreateInstanceData"  ))
         )
@@ -84,7 +86,8 @@ bool LoadScriptingModule(char const* libName)
         return false;
     }
 
-    printf("Scripts Library %s was successfully loaded.\n",name.c_str());
+    sLog.outString();
+    sLog.outString( ">>> Scripts Library %s was successfully loaded.\n", name.c_str() );
 
     //heh we are still there :P we have a valid library
     //we reload script

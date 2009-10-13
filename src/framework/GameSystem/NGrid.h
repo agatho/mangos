@@ -29,18 +29,26 @@
 class GridInfo
 {
 public:
-    GridInfo() : i_timer(0) {}
-    GridInfo(time_t expiry, bool unload = true ) : i_timer(expiry), i_unloadflag(unload) {}
+    GridInfo()
+        : i_timer(0), i_unloadActiveLockCount(0), i_unloadExplicitLock(false), i_unloadReferenceLock(false) {}
+    GridInfo(time_t expiry, bool unload = true )
+        : i_timer(expiry), i_unloadActiveLockCount(0), i_unloadExplicitLock(!unload), i_unloadReferenceLock(false) {}
     const TimeTracker& getTimeTracker() const { return i_timer; }
-    bool getUnloadFlag() const { return i_unloadflag; }
-    void setUnloadFlag( bool pFlag) { i_unloadflag = pFlag; }
+    bool getUnloadLock() const { return i_unloadActiveLockCount || i_unloadExplicitLock || i_unloadReferenceLock; }
+    void setUnloadExplicitLock( bool on ) { i_unloadExplicitLock = on; }
+    void setUnloadReferenceLock( bool on ) { i_unloadReferenceLock = on; }
+    void incUnloadActiveLock() { ++i_unloadActiveLockCount; }
+    void decUnloadActiveLock() { if(i_unloadActiveLockCount) --i_unloadActiveLockCount; }
+
     void setTimer(const TimeTracker& pTimer) { i_timer = pTimer; }
     void ResetTimeTracker(time_t interval) { i_timer.Reset(interval); }
     void UpdateTimeTracker(time_t diff) { i_timer.Update(diff); }
 
 private:
     TimeTracker i_timer;
-    bool i_unloadflag;
+    uint16 i_unloadActiveLockCount : 16;                    // lock from active object spawn points (prevent clone loading)
+    bool   i_unloadExplicitLock    : 1;                     // explicit manual lock or config setting
+    bool   i_unloadReferenceLock   : 1;                     // lock from instance map copy
 };
 
 typedef enum
@@ -65,21 +73,32 @@ class MANGOS_DLL_DECL NGrid
     public:
 
         typedef Grid<ACTIVE_OBJECT, WORLD_OBJECT_TYPES, GRID_OBJECT_TYPES, ThreadModel> GridType;
-        NGrid(uint32 id, int32 x, int32 y, time_t expiry, bool unload = true) :
-            i_gridId(id), i_cellstate(GRID_STATE_INVALID), i_x(x), i_y(y), i_GridObjectDataLoaded(false)
-            {
-                i_GridInfo = GridInfo(expiry, unload);
-            }
+        NGrid(uint32 id, int32 x, int32 y, time_t expiry, bool unload = true)
+            : i_gridId(id), i_x(x), i_y(y), i_cellstate(GRID_STATE_INVALID), i_GridObjectDataLoaded(false)
+        {
+            i_GridInfo = GridInfo(expiry, unload);
+        }
 
-        const GridType& operator()(unsigned short x, unsigned short y) const { return i_cells[x][y]; }
-        GridType& operator()(unsigned short x, unsigned short y) { return i_cells[x][y]; }
+        const GridType& operator()(unsigned short x, unsigned short y) const
+        {
+            ASSERT(x < N);
+            ASSERT(y < N);
+            return i_cells[x][y];
+        }
 
-        inline const uint32& GetGridId(void) const { return i_gridId; }
-        inline void SetGridId(const uint32 id) const { i_gridId = id; }
-        inline grid_state_t GetGridState(void) const { return i_cellstate; }
-        inline void SetGridState(grid_state_t s) { i_cellstate = s; }
-        inline int32 getX() const { return i_x; }
-        inline int32 getY() const { return i_y; }
+        GridType& operator()(unsigned short x, unsigned short y)
+        {
+            ASSERT(x < N);
+            ASSERT(y < N);
+            return i_cells[x][y];
+        }
+
+        const uint32& GetGridId(void) const { return i_gridId; }
+        void SetGridId(const uint32 id) const { i_gridId = id; }
+        grid_state_t GetGridState(void) const { return i_cellstate; }
+        void SetGridState(grid_state_t s) { i_cellstate = s; }
+        int32 getX() const { return i_x; }
+        int32 getY() const { return i_y; }
 
         void link(GridRefManager<NGrid<N, ACTIVE_OBJECT, WORLD_OBJECT_TYPES, GRID_OBJECT_TYPES, ThreadModel> >* pTo)
         {
@@ -90,19 +109,22 @@ class MANGOS_DLL_DECL NGrid
 
         GridInfo* getGridInfoRef() { return &i_GridInfo; }
         const TimeTracker& getTimeTracker() const { return i_GridInfo.getTimeTracker(); }
-        bool getUnloadFlag() const { return i_GridInfo.getUnloadFlag(); }
-        void setUnloadFlag( bool pFlag) { i_GridInfo.setUnloadFlag(pFlag); }
+        bool getUnloadLock() const { return i_GridInfo.getUnloadLock(); }
+        void setUnloadExplicitLock( bool on ) { i_GridInfo.setUnloadExplicitLock(on); }
+        void setUnloadReferenceLock( bool on ) { i_GridInfo.setUnloadReferenceLock(on); }
+        void incUnloadActiveLock() { i_GridInfo.incUnloadActiveLock(); }
+        void decUnloadActiveLock() { i_GridInfo.decUnloadActiveLock(); }
         void ResetTimeTracker(time_t interval) { i_GridInfo.ResetTimeTracker(interval); }
         void UpdateTimeTracker(time_t diff) { i_GridInfo.UpdateTimeTracker(diff); }
 
         template<class SPECIFIC_OBJECT> void AddWorldObject(const uint32 x, const uint32 y, SPECIFIC_OBJECT *obj, OBJECT_HANDLE hdl)
         {
-            i_cells[x][y].AddWorldObject(obj, hdl);
+            getGridType(x, y).AddWorldObject(obj, hdl);
         }
 
         template<class SPECIFIC_OBJECT> void RemoveWorldObject(const uint32 x, const uint32 y, SPECIFIC_OBJECT *obj, OBJECT_HANDLE hdl)
         {
-            i_cells[x][y].RemoveWorldObject(obj, hdl);
+            getGridType(x, y).RemoveWorldObject(obj, hdl);
         }
 
         template<class T, class TT> void Visit(TypeContainerVisitor<T, TypeMapContainer<TT> > &visitor)
@@ -114,7 +136,7 @@ class MANGOS_DLL_DECL NGrid
 
         template<class T, class TT> void Visit(const uint32 &x, const uint32 &y, TypeContainerVisitor<T, TypeMapContainer<TT> > &visitor)
         {
-            i_cells[x][y].Visit(visitor);
+            getGridType(x, y).Visit(visitor);
         }
 
         unsigned int ActiveObjectsInGrid(void) const
@@ -128,25 +150,32 @@ class MANGOS_DLL_DECL NGrid
 
         template<class SPECIFIC_OBJECT> const SPECIFIC_OBJECT* GetGridObject(const uint32 x, const uint32 y, OBJECT_HANDLE hdl) const
         {
-            return i_cells[x][y].template GetGridObject<SPECIFIC_OBJECT>(hdl);
+            return getGridType(x, y).template GetGridObject<SPECIFIC_OBJECT>(hdl);
         }
 
         template<class SPECIFIC_OBJECT> SPECIFIC_OBJECT* GetGridObject(const uint32 x, const uint32 y, OBJECT_HANDLE hdl)
         {
-            return i_cells[x][y].template GetGridObject<SPECIFIC_OBJECT>(hdl);
+            return getGridType(x, y).template GetGridObject<SPECIFIC_OBJECT>(hdl);
         }
 
         template<class SPECIFIC_OBJECT> bool AddGridObject(const uint32 x, const uint32 y, SPECIFIC_OBJECT *obj, OBJECT_HANDLE hdl)
         {
-            return i_cells[x][y].AddGridObject(hdl, obj);
+            return getGridType(x, y).AddGridObject(hdl, obj);
         }
 
         template<class SPECIFIC_OBJECT> bool RemoveGridObject(const uint32 x, const uint32 y, SPECIFIC_OBJECT *obj, OBJECT_HANDLE hdl)
         {
-            return i_cells[x][y].RemoveGridObject(obj, hdl);
+            return getGridType(x, y).RemoveGridObject(obj, hdl);
         }
 
     private:
+
+        GridType& getGridType(const uint32& x, const uint32& y)
+        {
+            ASSERT(x < N);
+            ASSERT(y < N);
+            return i_cells[x][y];
+        }
 
         uint32 i_gridId;
         GridInfo i_GridInfo;

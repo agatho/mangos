@@ -20,15 +20,12 @@
 #include "Log.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
-#include "World.h"
 #include "ObjectAccessor.h"
 #include "CreatureAI.h"
 #include "ObjectDefines.h"
 
 void WorldSession::HandleAttackSwingOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,8);
-
     uint64 guid;
     recv_data >> guid;
 
@@ -75,14 +72,18 @@ void WorldSession::HandleAttackStopOpcode( WorldPacket & /*recv_data*/ )
 
 void WorldSession::HandleSetSheathedOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,4);
-
     uint32 sheathed;
     recv_data >> sheathed;
 
     //sLog.outDebug( "WORLD: Recvd CMSG_SETSHEATHED Message guidlow:%u value1:%u", GetPlayer()->GetGUIDLow(), sheathed );
 
-    GetPlayer()->SetSheath(sheathed);
+    if(sheathed >= MAX_SHEATH_STATE)
+    {
+        sLog.outError("Unknown sheath state %u ??",sheathed);
+        return;
+    }
+
+    GetPlayer()->SetSheath(SheathState(sheathed));
 }
 
 void WorldSession::SendAttackStop(Unit const* enemy)

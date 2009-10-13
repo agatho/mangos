@@ -39,34 +39,32 @@ class DynamicObject : public WorldObject
         uint32 GetSpellId() const { return m_spellId; }
         uint32 GetEffIndex() const { return m_effIndex; }
         uint32 GetDuration() const { return m_aliveDuration; }
-        uint64 GetCasterGUID() const { return m_casterGuid; }
+        uint64 GetCasterGUID() const { return GetUInt64Value(DYNAMICOBJECT_CASTER); }
         Unit* GetCaster() const;
         float GetRadius() const { return m_radius; }
         bool IsAffecting(Unit *unit) const { return m_affected.find(unit) != m_affected.end(); }
         void AddAffected(Unit *unit) { m_affected.insert(unit); }
         void RemoveAffected(Unit *unit) { m_affected.erase(unit); }
         void Delay(int32 delaytime);
-        bool isVisibleForInState(Player const* u, bool inVisibleList) const;
+        bool isVisibleForInState(Player const* u, WorldObject const* viewPoint, bool inVisibleList) const;
 
-        void Say(const char* text, uint32 language, uint64 TargetGuid) { MonsterSay(text,language,TargetGuid); }
-        void Yell(const char* text, uint32 language, uint64 TargetGuid) { MonsterYell(text,language,TargetGuid); }
-        void TextEmote(const char* text, uint64 TargetGuid) { MonsterTextEmote(text,TargetGuid); }
-        void Whisper(const char* text, uint64 receiver) { MonsterWhisper(text,receiver); }
         void Say(int32 textId, uint32 language, uint64 TargetGuid) { MonsterSay(textId,language,TargetGuid); }
         void Yell(int32 textId, uint32 language, uint64 TargetGuid) { MonsterYell(textId,language,TargetGuid); }
         void TextEmote(int32 textId, uint64 TargetGuid) { MonsterTextEmote(textId,TargetGuid); }
         void Whisper(int32 textId,uint64 receiver) { MonsterWhisper(textId,receiver); }
+        void YellToZone(int32 textId, uint32 language, uint64 TargetGuid) { MonsterYellToZone(textId,language,TargetGuid); }
 
         GridReference<DynamicObject> &GetGridRef() { return m_gridRef; }
+
+        bool isActiveObject() const { return m_isActiveObject; }
     protected:
-        uint64 m_casterGuid;
         uint32 m_spellId;
         uint32 m_effIndex;
         int32 m_aliveDuration;
-        time_t m_nextThinkTime;
-        float m_radius;
+        float m_radius;                                     // radius apply persistent effect, 0 = no persistent effect
         AffectedSet m_affected;
     private:
         GridReference<DynamicObject> m_gridRef;
+        bool m_isActiveObject;
 };
 #endif

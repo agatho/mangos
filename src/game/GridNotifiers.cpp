@@ -22,7 +22,6 @@
 #include "UpdateData.h"
 #include "Item.h"
 #include "Map.h"
-#include "MapManager.h"
 #include "Transports.h"
 #include "ObjectAccessor.h"
 
@@ -31,13 +30,16 @@ using namespace MaNGOS;
 void
 MaNGOS::PlayerNotifier::Visit(PlayerMapType &m)
 {
+    WorldObject const* viewPoint = i_player.GetViewPoint();
+
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if( iter->getSource() == &i_player )
+        Player* player = iter->getSource();
+        if( player == &i_player )
             continue;
 
-        iter->getSource()->UpdateVisibilityOf(&i_player);
-        i_player.UpdateVisibilityOf(iter->getSource());
+        player->UpdateVisibilityOf(player->GetViewPoint(),&i_player);
+        i_player.UpdateVisibilityOf(viewPoint,player);
     }
 }
 
@@ -46,24 +48,28 @@ VisibleChangesNotifier::Visit(PlayerMapType &m)
 {
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if(iter->getSource() == &i_object)
+        Player* player = iter->getSource();
+        if(player == &i_object)
             continue;
 
-        iter->getSource()->UpdateVisibilityOf(&i_object);
+        player->UpdateVisibilityOf(player->GetViewPoint(),&i_object);
     }
 }
 
 void
 VisibleNotifier::Visit(PlayerMapType &m)
 {
+    WorldObject const* viewPoint = i_player.GetViewPoint();
+
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if( iter->getSource() == &i_player )
+        Player* player = iter->getSource();
+        if( player == &i_player )
             continue;
 
-        iter->getSource()->UpdateVisibilityOf(&i_player);
-        i_player.UpdateVisibilityOf(iter->getSource(),i_data,i_data_updates,i_visibleNow);
-        i_clientGUIDs.erase(iter->getSource()->GetGUID());
+        player->UpdateVisibilityOf(player->GetViewPoint(),&i_player);
+        i_player.UpdateVisibilityOf(viewPoint,player,i_data,i_data_updates,i_visibleNow);
+        i_clientGUIDs.erase(player->GetGUID());
     }
 }
 
@@ -78,8 +84,9 @@ VisibleNotifier::Notify()
         {
             if(i_clientGUIDs.find((*itr)->GetGUID())!=i_clientGUIDs.end())
             {
-                (*itr)->UpdateVisibilityOf(&i_player);
-                i_player.UpdateVisibilityOf((*itr),i_data,i_data_updates,i_visibleNow);
+                // ignore far sight case
+                (*itr)->UpdateVisibilityOf((*itr),&i_player);
+                i_player.UpdateVisibilityOf(&i_player,(*itr),i_data,i_data_updates,i_visibleNow);
                 i_clientGUIDs.erase((*itr)->GetGUID());
             }
         }
@@ -122,19 +129,24 @@ VisibleNotifier::Notify()
             if(!IS_PLAYER_GUID(*iter))
                 continue;
 
-            Player* plr = ObjectAccessor::GetPlayer(i_player,*iter);
-            if(plr)
-                plr->UpdateVisibilityOf(&i_player);
+            if (Player* plr = ObjectAccessor::GetPlayer(i_player,*iter))
+                plr->UpdateVisibilityOf(plr->GetViewPoint(),&i_player);
         }
     }
 
     // Now do operations that required done at object visibility change to visible
 
-    // target aura duration for caster show only if target exist at caster client
     // send data at target visibility change (adding to client)
     for(std::set<WorldObject*>::const_iterator vItr = i_visibleNow.begin(); vItr != i_visibleNow.end(); ++vItr)
+    {
+        // target aura duration for caster show only if target exist at caster client
         if((*vItr)!=&i_player && (*vItr)->isType(TYPEMASK_UNIT))
             i_player.SendAurasForTarget((Unit*)(*vItr));
+
+        // non finished movements show to player
+        if((*vItr)->GetTypeId()==TYPEID_UNIT && ((Creature*)(*vItr))->isAlive())
+            ((Creature*)(*vItr))->SendMonsterMoveWithSpeedToCurrentDestination(&i_player);
+    }
 }
 
 void
@@ -142,8 +154,11 @@ MessageDeliverer::Visit(PlayerMapType &m)
 {
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if( i_toSelf || iter->getSource() != &i_player)
+        if (i_toSelf || iter->getSource() != &i_player)
         {
+            if (!i_player.InSamePhase(iter->getSource()))
+                continue;
+
             if(WorldSession* session = iter->getSource()->GetSession())
                 session->SendPacket(i_message);
         }
@@ -155,6 +170,9 @@ ObjectMessageDeliverer::Visit(PlayerMapType &m)
 {
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
+        if(!iter->getSource()->InSamePhase(i_phaseMask))
+            continue;
+
         if(WorldSession* session = iter->getSource()->GetSession())
             session->SendPacket(i_message);
     }
@@ -165,11 +183,14 @@ MessageDistDeliverer::Visit(PlayerMapType &m)
 {
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if( (i_toSelf || iter->getSource() != &i_player ) &&
+        if ((i_toSelf || iter->getSource() != &i_player ) &&
             (!i_ownTeamOnly || iter->getSource()->GetTeam() == i_player.GetTeam() ) &&
-            (!i_dist || iter->getSource()->GetDistance(&i_player) <= i_dist) )
+            (!i_dist || iter->getSource()->IsWithinDist(&i_player,i_dist)))
         {
-            if(WorldSession* session = iter->getSource()->GetSession())
+            if (!i_player.InSamePhase(iter->getSource()))
+                continue;
+
+            if (WorldSession* session = iter->getSource()->GetSession())
                 session->SendPacket(i_message);
         }
     }
@@ -180,9 +201,12 @@ ObjectMessageDistDeliverer::Visit(PlayerMapType &m)
 {
     for(PlayerMapType::iterator iter=m.begin(); iter != m.end(); ++iter)
     {
-        if( !i_dist || iter->getSource()->GetDistance(&i_object) <= i_dist )
+        if (!i_dist || iter->getSource()->IsWithinDist(&i_object,i_dist))
         {
-            if(WorldSession* session = iter->getSource()->GetSession())
+            if (!i_object.InSamePhase(iter->getSource()))
+                continue;
+
+            if (WorldSession* session = iter->getSource()->GetSession())
                 session->SendPacket(i_message);
         }
     }
@@ -196,9 +220,6 @@ ObjectUpdater::Visit(GridRefManager<T> &m)
         iter->getSource()->Update(i_timeDiff);
     }
 }
-
-template void ObjectUpdater::Visit<GameObject>(GameObjectMapType &);
-template void ObjectUpdater::Visit<DynamicObject>(DynamicObjectMapType &);
 
 bool CannibalizeObjectCheck::operator()(Corpse* u)
 {
@@ -216,3 +237,6 @@ bool CannibalizeObjectCheck::operator()(Corpse* u)
 
     return false;
 }
+
+template void ObjectUpdater::Visit<GameObject>(GameObjectMapType &);
+template void ObjectUpdater::Visit<DynamicObject>(DynamicObjectMapType &);

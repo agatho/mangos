@@ -17,8 +17,6 @@
  */
 
 #include "TemporarySummon.h"
-#include "WorldPacket.h"
-#include "MapManager.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "CreatureAI.h"
@@ -167,14 +165,13 @@ void TemporarySummon::UnSummon()
 {
     CombatStop();
 
-    CleanupsBeforeDelete();
-    AddObjectToRemoveList();
-
     Unit* sum = m_summoner ? ObjectAccessor::GetUnit(*this, m_summoner) : NULL;
     if (sum  && sum->GetTypeId() == TYPEID_UNIT && ((Creature*)sum)->AI())
     {
         ((Creature*)sum)->AI()->SummonedCreatureDespawn(this);
     }
+
+    AddObjectToRemoveList();
 }
 
 void TemporarySummon::SaveToDB()

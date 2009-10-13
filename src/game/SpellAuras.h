@@ -20,15 +20,6 @@
 
 #include "SpellAuraDefines.h"
 
-struct DamageManaShield
-{
-    uint32 m_spellId;
-    uint32 m_modType;
-    int32 m_schoolType;
-    uint32 m_totalAbsorb;
-    uint32 m_currAbsorb;
-};
-
 struct Modifier
 {
     AuraType m_auraname;
@@ -110,8 +101,11 @@ class MANGOS_DLL_SPEC Aura
         void HandleAuraModRegenInterrupt(bool Apply, bool Real);
         void HandleHaste(bool Apply, bool Real);
         void HandlePeriodicTriggerSpell(bool Apply, bool Real);
+        void HandlePeriodicTriggerSpellWithValue(bool apply, bool Real);
         void HandlePeriodicEnergize(bool Apply, bool Real);
         void HandleAuraModResistanceExclusive(bool Apply, bool Real);
+        void HandleAuraSafeFall(bool Apply, bool Real);
+        void HandleAuraModPetTalentsPoints(bool Apply, bool Real);
         void HandleModStealth(bool Apply, bool Real);
         void HandleInvisibility(bool Apply, bool Real);
         void HandleInvisibilityDetect(bool Apply, bool Real);
@@ -146,6 +140,7 @@ class MANGOS_DLL_SPEC Aura
         void HandleModSpellHitChance(bool Apply, bool Real);
         void HandleAuraModScale(bool Apply, bool Real);
         void HandlePeriodicManaLeech(bool Apply, bool Real);
+        void HandlePeriodicHealthFunnel(bool apply, bool Real);
         void HandleModCastingSpeed(bool Apply, bool Real);
         void HandleAuraMounted(bool Apply, bool Real);
         void HandleWaterBreathing(bool Apply, bool Real);
@@ -189,6 +184,7 @@ class MANGOS_DLL_SPEC Aura
         void HandleAuraModRangedAttackPowerPercent(bool apply, bool Real);
         void HandleAuraModRangedAttackPowerOfStatPercent(bool apply, bool Real);
         void HandleAuraModAttackPowerOfStatPercent(bool apply, bool Real);
+        void HandleAuraModAttackPowerOfArmor(bool apply, bool Real);
         void HandleSpiritOfRedemption(bool apply, bool Real);
         void HandleModManaRegen(bool apply, bool Real);
         void HandleComprehendLanguage(bool apply, bool Real);
@@ -214,13 +210,17 @@ class MANGOS_DLL_SPEC Aura
         void HandleAuraConvertRune(bool apply, bool Real);
         void HandleAuraIncreaseBaseHealthPercent(bool Apply, bool Real);
         void HandleNoReagentUseAura(bool Apply, bool Real);
+        void HandlePhase(bool Apply, bool Real);
+        void HandleModTargetArmorPct(bool Apply, bool Real);
+        void HandleAuraModAllCritChance(bool Apply, bool Real);
 
         virtual ~Aura();
 
         void SetModifier(AuraType t, int32 a, uint32 pt, int32 miscValue);
-        Modifier* GetModifier() {return &m_modifier;}
-        int32 GetMiscValue() {return m_spellProto->EffectMiscValue[m_effIndex];}
-        int32 GetMiscBValue() {return m_spellProto->EffectMiscValueB[m_effIndex];}
+        Modifier*       GetModifier()       { return &m_modifier; }
+        Modifier const* GetModifier() const { return &m_modifier; }
+        int32 GetMiscValue() const { return m_spellProto->EffectMiscValue[m_effIndex]; }
+        int32 GetMiscBValue() const { return m_spellProto->EffectMiscValueB[m_effIndex]; }
 
         SpellEntry const* GetSpellProto() const { return m_spellProto; }
         uint32 GetId() const{ return m_spellProto->Id; }
@@ -256,21 +256,23 @@ class MANGOS_DLL_SPEC Aura
         uint8 GetAuraLevel() const { return m_auraLevel; }
         void SetAuraLevel(uint8 level) { m_auraLevel = level; }
         uint8 GetAuraCharges() const { return m_procCharges; }
-        void SetAuraCharges(uint8 charges) 
+        void SetAuraCharges(uint8 charges)
         {
             if (m_procCharges == charges)
                 return;
             m_procCharges = charges;
             SendAuraUpdate(false);
         }
-        bool DropAuraCharge() // return true if last charge dropped
-        { 
+        bool DropAuraCharge()                               // return true if last charge dropped
+        {
             if (m_procCharges == 0)
                 return false;
             m_procCharges--;
             SendAuraUpdate(false);
             return m_procCharges == 0;
         }
+
+        void UnregisterSingleCastAura();
 
         void SetAura(bool remove) { m_target->SetVisibleAura(m_auraSlot, remove ? 0 : GetId()); }
         void SendAuraUpdate(bool remove);
@@ -287,41 +289,61 @@ class MANGOS_DLL_SPEC Aura
         bool IsPermanent() const { return m_permanent; }
         bool IsAreaAura() const { return m_isAreaAura; }
         bool IsPeriodic() const { return m_isPeriodic; }
-        bool IsTrigger() const { return m_isTrigger; }
         bool IsPassive() const { return m_isPassive; }
         bool IsPersistent() const { return m_isPersistent; }
         bool IsDeathPersistent() const { return m_isDeathPersist; }
         bool IsRemovedOnShapeLost() const { return m_isRemovedOnShapeLost; }
         bool IsInUse() const { return m_in_use;}
+        bool IsDeleted() const { return m_deleted;}
 
-        virtual void Update(uint32 diff);
+        void SetInUse(bool state)
+        {
+            if(state)
+                ++m_in_use;
+            else
+            {
+                if(m_in_use)
+                    --m_in_use;
+            }
+        }
         void ApplyModifier(bool apply, bool Real = false);
 
+        void UpdateAura(uint32 diff) { SetInUse(true); Update(diff); SetInUse(false); }
         void _AddAura();
-        void _RemoveAura();
+        bool _RemoveAura();
 
-        void TriggerSpell();
+        bool IsSingleTarget() {return m_isSingleTargetAura;}
+        void SetIsSingleTarget(bool val) { m_isSingleTargetAura = val;}
 
-        bool IsUpdated() { return m_updated; }
-        void SetUpdated(bool val) { m_updated = val; }
         void SetRemoveMode(AuraRemoveMode mode) { m_removeMode = mode; }
 
         virtual Unit* GetTriggerTarget() const { return m_target; }
 
         // add/remove SPELL_AURA_MOD_SHAPESHIFT (36) linked auras
         void HandleShapeshiftBoosts(bool apply);
+        void HandleSpellSpecificBoosts(bool apply);
 
         // Allow Apply Aura Handler to modify and access m_AuraDRGroup
         void setDiminishGroup(DiminishingGroup group) { m_AuraDRGroup = group; }
         DiminishingGroup getDiminishGroup() const { return m_AuraDRGroup; }
 
-        void PeriodicTick();
-        void PeriodicDummyTick();
+        void TriggerSpell();
+        void TriggerSpellWithValue();
 
         uint32 const *getAuraSpellClassMask() const { return  m_spellProto->EffectSpellClassMaskA + m_effIndex * 3; }
         bool isAffectedOnSpell(SpellEntry const *spell) const;
     protected:
         Aura(SpellEntry const* spellproto, uint32 eff, int32 *currentBasePoints, Unit *target, Unit *caster = NULL, Item* castItem = NULL);
+
+        // must be called only from Aura::UpdateAura
+        virtual void Update(uint32 diff);
+
+        // must be called only from Aura*::Update
+        void PeriodicTick();
+        void PeriodicDummyTick();
+
+        bool IsCritFromAbilityAura(Unit* caster, uint32& damage);
+        void ReapplyAffectedPassiveAuras(Unit* target);
 
         Modifier m_modifier;
         SpellModifier *m_spellmod;
@@ -351,17 +373,18 @@ class MANGOS_DLL_SPEC Aura
         bool m_positive:1;
         bool m_permanent:1;
         bool m_isPeriodic:1;
-        bool m_isTrigger:1;
         bool m_isAreaAura:1;
         bool m_isPassive:1;
         bool m_isPersistent:1;
         bool m_isDeathPersist:1;
         bool m_isRemovedOnShapeLost:1;
-        bool m_updated:1;                                   // Prevent remove aura by stack if set
-        bool m_in_use:1;                                    // true while in Aura::ApplyModifier call
+        bool m_deleted:1;                                   // true if RemoveAura(iterator) called while in Aura::ApplyModifier call (added to Unit::m_deletedAuras)
+        bool m_isSingleTargetAura:1;                        // true if it's a single target spell and registered at caster - can change at spell steal for example
 
+        uint32 m_in_use;                                    // > 0 while in Aura::ApplyModifier call/Aura::Update/etc
     private:
         void CleanupTriggeredSpells();
+        bool IsNeedVisibleSlot(Unit const* caster) const;   // helper for check req. visibility slot
 };
 
 class MANGOS_DLL_SPEC AreaAura : public Aura
@@ -369,6 +392,7 @@ class MANGOS_DLL_SPEC AreaAura : public Aura
     public:
         AreaAura(SpellEntry const* spellproto, uint32 eff, int32 *currentBasePoints, Unit *target, Unit *caster = NULL, Item* castItem = NULL);
         ~AreaAura();
+    protected:
         void Update(uint32 diff);
     private:
         float m_radius;
@@ -380,6 +404,7 @@ class MANGOS_DLL_SPEC PersistentAreaAura : public Aura
     public:
         PersistentAreaAura(SpellEntry const* spellproto, uint32 eff, int32 *currentBasePoints, Unit *target, Unit *caster = NULL, Item* castItem = NULL);
         ~PersistentAreaAura();
+    protected:
         void Update(uint32 diff);
 };
 

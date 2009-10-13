@@ -21,6 +21,7 @@
 
 #include "Common.h"
 #include <stack>
+#include <vector>
 
 class MovementGenerator;
 class Unit;
@@ -43,15 +44,26 @@ enum MovementGeneratorType
     POINT_MOTION_TYPE     = 8,                              // PointMovementGenerator.h
     FLEEING_MOTION_TYPE   = 9,                              // FleeingMovementGenerator.h
     DISTRACT_MOTION_TYPE  = 10,                             // IdleMovementGenerator.h
+    ASSISTANCE_MOTION_TYPE= 11,                             // PointMovementGenerator.h (first part of flee for assistance)
+    ASSISTANCE_DISTRACT_MOTION_TYPE = 12,                   // IdleMovementGenerator.h (second part of flee for assistance)
+    TIMED_FLEEING_MOTION_TYPE = 13,                         // FleeingMovementGenerator.h (alt.second part of flee for assistance)
+};
+
+enum MMCleanFlag
+{
+    MMCF_NONE   = 0,
+    MMCF_UPDATE = 1, // Clear or Expire called from update
+    MMCF_RESET  = 2  // Flag if need top()->Reset()
 };
 
 class MANGOS_DLL_SPEC MotionMaster : private std::stack<MovementGenerator *>
 {
     private:
         typedef std::stack<MovementGenerator *> Impl;
+        typedef std::vector<MovementGenerator *> ExpireList;
     public:
 
-        explicit MotionMaster(Unit *unit) : i_owner(unit) {}
+        explicit MotionMaster(Unit *unit) : i_owner(unit), m_expList(NULL), m_cleanFlag(MMCF_NONE) {}
         ~MotionMaster();
 
         void Initialize();
@@ -65,17 +77,43 @@ class MANGOS_DLL_SPEC MotionMaster : private std::stack<MovementGenerator *>
         const_iterator begin() const { return Impl::c.begin(); }
         const_iterator end() const { return Impl::c.end(); }
 
-        void UpdateMotion(const uint32 &diff);
-        void Clear(bool reset = true);
-        void MovementExpired(bool reset = true);
+        void UpdateMotion(uint32 diff);
+        void Clear(bool reset = true)
+        {
+            if (m_cleanFlag & MMCF_UPDATE)
+            {
+                if(reset)
+                    m_cleanFlag |= MMCF_RESET;
+                else
+                    m_cleanFlag &= ~MMCF_RESET;
+                DelayedClean();
+            }
+            else
+                DirectClean(reset);
+        }
+        void MovementExpired(bool reset = true)
+        {
+            if (m_cleanFlag & MMCF_UPDATE)
+            {
+                if(reset)
+                    m_cleanFlag |= MMCF_RESET;
+                else
+                    m_cleanFlag &= ~MMCF_RESET;
+                DelayedExpire();
+            }
+            else
+                DirectExpire(reset);
+        }
 
         void MoveIdle();
         void MoveTargetedHome();
         void MoveFollow(Unit* target, float dist, float angle);
         void MoveChase(Unit* target, float dist = 0.0f, float angle = 0.0f);
         void MoveConfused();
-        void MoveFleeing(Unit* enemy);
+        void MoveFleeing(Unit* enemy, uint32 time = 0);
         void MovePoint(uint32 id, float x,float y,float z);
+        void MoveSeekAssistance(float x,float y,float z);
+        void MoveSeekAssistanceDistract(uint32 timer);
         void MoveTaxiFlight(uint32 path, uint32 pathnode);
         void MoveDistract(uint32 time);
 
@@ -87,6 +125,14 @@ class MANGOS_DLL_SPEC MotionMaster : private std::stack<MovementGenerator *>
     private:
         void Mutate(MovementGenerator *m);                  // use Move* functions instead
 
-        Unit *i_owner;
+        void DirectClean(bool reset);
+        void DelayedClean();
+
+        void DirectExpire(bool reset);
+        void DelayedExpire();
+
+        Unit       *i_owner;
+        ExpireList *m_expList;
+        uint8       m_cleanFlag;
 };
 #endif

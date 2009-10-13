@@ -31,9 +31,9 @@
 #include "Corpse.h"
 #include "ObjectMgr.h"
 
-#define CLASS_LOCK MaNGOS::ClassLevelLockable<MapManager, ZThread::Mutex>
+#define CLASS_LOCK MaNGOS::ClassLevelLockable<MapManager, ACE_Thread_Mutex>
 INSTANTIATE_SINGLETON_2(MapManager, CLASS_LOCK);
-INSTANTIATE_CLASS_MUTEX(MapManager, ZThread::Mutex);
+INSTANTIATE_CLASS_MUTEX(MapManager, ACE_Thread_Mutex);
 
 extern GridState* si_GridStates[];                          // debugging code, should be deleted some day
 
@@ -70,6 +70,12 @@ MapManager::Initialize()
     InitMaxInstanceId();
 }
 
+void MapManager::InitializeVisibilityDistanceInfo()
+{
+    for(MapMapType::iterator iter=i_maps.begin(); iter != i_maps.end(); ++iter)
+        (*iter).second->InitVisibilityDistance();
+}
+
 // debugging code, should be deleted some day
 void MapManager::checkAndCorrectGridStatesArray()
 {
@@ -98,7 +104,7 @@ void MapManager::checkAndCorrectGridStatesArray()
 }
 
 Map*
-MapManager::_GetBaseMap(uint32 id)
+MapManager::_createBaseMap(uint32 id)
 {
     Map *m = _findMap(id);
 
@@ -122,21 +128,26 @@ MapManager::_GetBaseMap(uint32 id)
     return m;
 }
 
-Map* MapManager::GetMap(uint32 id, const WorldObject* obj)
+Map* MapManager::CreateMap(uint32 id, const WorldObject* obj)
 {
+    ASSERT(obj);
     //if(!obj->IsInWorld()) sLog.outError("GetMap: called for map %d with object (typeid %d, guid %d, mapid %d, instanceid %d) who is not in world!", id, obj->GetTypeId(), obj->GetGUIDLow(), obj->GetMapId(), obj->GetInstanceId());
-    Map *m = _GetBaseMap(id);
+    Map *m = _createBaseMap(id);
 
-    if (m && obj && m->Instanceable()) m = ((MapInstanced*)m)->GetInstance(obj);
+    if (m && (obj->GetTypeId() == TYPEID_PLAYER) && m->Instanceable()) m = ((MapInstanced*)m)->CreateInstance(id, (Player*)obj);
 
     return m;
 }
 
-Map* MapManager::FindMap(uint32 mapid, uint32 instanceId)
+Map* MapManager::FindMap(uint32 mapid, uint32 instanceId) const
 {
-    Map *map = FindMap(mapid);
-    if(!map) return NULL;
-    if(!map->Instanceable()) return instanceId == 0 ? map : NULL;
+    Map *map = _findMap(mapid);
+    if(!map)
+        return NULL;
+
+    if(!map->Instanceable())
+        return instanceId == 0 ? map : NULL;
+
     return ((MapInstanced*)map)->FindMap(instanceId);
 }
 
@@ -171,10 +182,16 @@ bool MapManager::CanPlayerEnter(uint32 mapid, Player* player)
         }
 
         //The player has a heroic mode and tries to enter into instance which has no a heroic mode
-        if (!entry->SupportsHeroicMode() && player->GetDifficulty() == DIFFICULTY_HEROIC)
+        MapDifficulty const* mapDiff = GetMapDifficultyData(entry->MapID,player->GetDifficulty(entry->map_type == MAP_RAID));
+        if (!mapDiff)
         {
+            bool isHeroicTargetMap = entry->map_type == MAP_RAID
+                ? (player->GetRaidDifficulty()    >= RAID_DIFFICULTY_10MAN_HEROIC)
+                : (player->GetDungeonDifficulty() >= DUNGEON_DIFFICULTY_HEROIC);
+
             //Send aborted message
-            player->SendTransferAborted(mapid, TRANSFER_ABORT_DIFFICULTY, DIFFICULTY_HEROIC);
+            // FIX ME: what about absent normal/heroic mode with specific players limit...
+            player->SendTransferAborted(mapid, TRANSFER_ABORT_DIFFICULTY, isHeroicTargetMap ? DUNGEON_DIFFICULTY_HEROIC : DUNGEON_DIFFICULTY_NORMAL);
             return false;
         }
 
@@ -223,14 +240,14 @@ bool MapManager::CanPlayerEnter(uint32 mapid, Player* player)
 
 void MapManager::DeleteInstance(uint32 mapid, uint32 instanceId)
 {
-    Map *m = _GetBaseMap(mapid);
+    Map *m = _createBaseMap(mapid);
     if (m && m->Instanceable())
         ((MapInstanced*)m)->DestroyInstance(instanceId);
 }
 
 void MapManager::RemoveBonesFromMap(uint32 mapid, uint64 guid, float x, float y)
 {
-    bool remove_result = _GetBaseMap(mapid)->RemoveBones(guid, x, y);
+    bool remove_result = _createBaseMap(mapid)->RemoveBones(guid, x, y);
 
     if (!remove_result)
     {
@@ -239,13 +256,11 @@ void MapManager::RemoveBonesFromMap(uint32 mapid, uint64 guid, float x, float y)
 }
 
 void
-MapManager::Update(time_t diff)
+MapManager::Update(uint32 diff)
 {
     i_timer.Update(diff);
     if( !i_timer.Passed() )
         return;
-
-    ObjectAccessor::Instance().UpdatePlayers(i_timer.GetCurrent());
 
     for(MapMapType::iterator iter=i_maps.begin(); iter != i_maps.end(); ++iter)
     {
@@ -281,13 +296,6 @@ bool MapManager::IsValidMAP(uint32 mapid)
     MapEntry const* mEntry = sMapStore.LookupEntry(mapid);
     return mEntry && (!mEntry->IsDungeon() || objmgr.GetInstanceTemplate(mapid));
     // TODO: add check for battleground template
-}
-
-void MapManager::LoadGrid(int mapid, float x, float y, const WorldObject* obj, bool no_unload)
-{
-    CellPair p = MaNGOS::ComputeCellPair(x,y);
-    Cell cell(p);
-    GetMap(mapid, obj)->LoadGrid(cell,no_unload);
 }
 
 void MapManager::UnloadAll()

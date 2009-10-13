@@ -30,13 +30,13 @@
 #include <stdarg.h>
 
 /// %Log packets to a file
-class MANGOS_DLL_DECL WorldLog : public MaNGOS::Singleton<WorldLog, MaNGOS::ClassLevelLockable<WorldLog, ZThread::FastMutex> >
+class MANGOS_DLL_DECL WorldLog : public MaNGOS::Singleton<WorldLog, MaNGOS::ClassLevelLockable<WorldLog, ACE_Thread_Mutex> >
 {
     friend class MaNGOS::OperatorNew<WorldLog>;
     WorldLog() : i_file(NULL) { Initialize(); }
     WorldLog(const WorldLog &);
     WorldLog& operator=(const WorldLog &);
-    typedef MaNGOS::ClassLevelLockable<WorldLog, ZThread::FastMutex>::Lock Guard;
+    typedef MaNGOS::ClassLevelLockable<WorldLog, ACE_Thread_Mutex>::Lock Guard;
 
     /// Close the file in destructor
     ~WorldLog()
@@ -49,9 +49,9 @@ class MANGOS_DLL_DECL WorldLog : public MaNGOS::Singleton<WorldLog, MaNGOS::Clas
     public:
         void Initialize();
         /// Is the world logger active?
-        inline bool LogWorld(void) const { return (i_file != NULL); }
+        bool LogWorld(void) const { return (i_file != NULL); }
         /// %Log to the file
-        inline void Log(char const *fmt, ...)
+        void Log(char const *fmt, ...)
         {
             if( LogWorld() )
             {

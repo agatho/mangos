@@ -55,7 +55,7 @@ void utf8print(const char* str)
 /// \todo This function has to be enhanced to respect the login/realm split (delete char, delete account chars in realm, delete account chars in realm then delete account
 bool ChatHandler::HandleAccountDeleteCommand(const char* args)
 {
-    if(!*args)
+    if (!*args)
         return false;
 
     ///- Get the account name from the command line
@@ -64,7 +64,7 @@ bool ChatHandler::HandleAccountDeleteCommand(const char* args)
         return false;
 
     std::string account_name = account_name_str;
-    if(!AccountMgr::normilizeString(account_name))
+    if (!AccountMgr::normalizeString(account_name))
     {
         PSendSysMessage(LANG_ACCOUNT_NOT_EXIST,account_name.c_str());
         SetSentErrorMessage(true);
@@ -72,7 +72,7 @@ bool ChatHandler::HandleAccountDeleteCommand(const char* args)
     }
 
     uint32 account_id = accmgr.GetId(account_name);
-    if(!account_id)
+    if (!account_id)
     {
         PSendSysMessage(LANG_ACCOUNT_NOT_EXIST,account_name.c_str());
         SetSentErrorMessage(true);
@@ -153,7 +153,7 @@ bool ChatHandler::HandleCharacterDeleteCommand(const char* args)
 }
 
 /// Exit the realm
-bool ChatHandler::HandleServerExitCommand(const char* args)
+bool ChatHandler::HandleServerExitCommand(const char* /*args*/)
 {
     SendSysMessage(LANG_COMMAND_EXIT);
     World::StopNow(SHUTDOWN_EXIT_CODE);
@@ -161,17 +161,20 @@ bool ChatHandler::HandleServerExitCommand(const char* args)
 }
 
 /// Display info on users currently in the realm
-bool ChatHandler::HandleAccountOnlineListCommand(const char* args)
+bool ChatHandler::HandleAccountOnlineListCommand(const char* /*args*/)
 {
     ///- Get the list of accounts ID logged to the realm
     QueryResult *resultDB = CharacterDatabase.Query("SELECT name,account FROM characters WHERE online > 0");
     if (!resultDB)
+    {
+        SendSysMessage(LANG_ACCOUNT_LIST_EMPTY);
         return true;
+    }
 
     ///- Display the list of account/characters online
-    SendSysMessage("=====================================================================");
+    SendSysMessage(LANG_ACCOUNT_LIST_BAR);
     SendSysMessage(LANG_ACCOUNT_LIST_HEADER);
-    SendSysMessage("=====================================================================");
+    SendSysMessage(LANG_ACCOUNT_LIST_BAR);
 
     ///- Circle through accounts
     do
@@ -188,7 +191,7 @@ bool ChatHandler::HandleAccountOnlineListCommand(const char* args)
         if(resultLogin)
         {
             Field *fieldsLogin = resultLogin->Fetch();
-            PSendSysMessage("|%15s| %20s | %15s |%4d|%5d|",
+            PSendSysMessage(LANG_ACCOUNT_LIST_LINE,
                 fieldsLogin[0].GetString(),name.c_str(),fieldsLogin[1].GetString(),fieldsLogin[2].GetUInt32(),fieldsLogin[3].GetUInt32());
 
             delete resultLogin;
@@ -200,7 +203,7 @@ bool ChatHandler::HandleAccountOnlineListCommand(const char* args)
 
     delete resultDB;
 
-    SendSysMessage("=====================================================================");
+    SendSysMessage(LANG_ACCOUNT_LIST_BAR);
     return true;
 }
 
@@ -216,7 +219,7 @@ bool ChatHandler::HandleAccountCreateCommand(const char* args)
     if(!szAcc || !szPassword)
         return false;
 
-    // normilized in accmgr.CreateAccount
+    // normalized in accmgr.CreateAccount
     std::string account_name = szAcc;
     std::string password = szPassword;
 

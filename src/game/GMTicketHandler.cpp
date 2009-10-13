@@ -34,10 +34,10 @@ void WorldSession::SendGMTicketGetTicket(uint32 status, char const* text)
     {
         data << text;                                       // ticket text
         data << uint8(0x7);                                 // ticket category
-        data << float(0);                                   // time from ticket creation?
-        data << float(0);                                   // const
-        data << float(0);                                   // const
-        data << uint8(0);                                   // const
+        data << float(0);                                   // tickets in queue?
+        data << float(0);                                   // if > "tickets in queue" then "We are currently experiencing a high volume of petitions."
+        data << float(0);                                   // 0 - "Your ticket will be serviced soon", 1 - "Wait time currently unavailable"
+        data << uint8(0);                                   // if == 2 and next field == 1 then "Your ticket has been escalated"
         data << uint8(0);                                   // const
     }
     SendPacket( &data );
@@ -59,8 +59,6 @@ void WorldSession::HandleGMTicketGetTicketOpcode( WorldPacket & /*recv_data*/ )
 
 void WorldSession::HandleGMTicketUpdateTextOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data,1);
-
     std::string ticketText;
     recv_data >> ticketText;
 
@@ -70,7 +68,7 @@ void WorldSession::HandleGMTicketUpdateTextOpcode( WorldPacket & recv_data )
         sLog.outError("Ticket update: Player %s (GUID: %u) doesn't have active ticket", GetPlayer()->GetName(), GetPlayer()->GetGUIDLow());
 }
 
-void WorldSession::HandleGMTicketDeleteOpcode( WorldPacket & /*recv_data*/ )
+void WorldSession::HandleGMTicketDeleteTicketOpcode( WorldPacket & /*recv_data*/ )
 {
     ticketmgr.Delete(GetPlayer()->GetGUIDLow());
 
@@ -83,28 +81,24 @@ void WorldSession::HandleGMTicketDeleteOpcode( WorldPacket & /*recv_data*/ )
 
 void WorldSession::HandleGMTicketCreateOpcode( WorldPacket & recv_data )
 {
-    CHECK_PACKET_SIZE(recv_data, 4*4+1+2*4);
-
     uint32 map;
     float x, y, z;
     std::string ticketText = "";
-    uint32 unk1, unk2;
 
     recv_data >> map >> x >> y >> z;                        // last check 2.4.3
     recv_data >> ticketText;
 
-    // recheck
-    CHECK_PACKET_SIZE(recv_data,4*4+(ticketText.size()+1)+2*4);
+    recv_data.read_skip<uint32>();                          // unk1, 0
+    recv_data.read_skip<uint8>();                           // unk2, 1
+    recv_data.read_skip<uint32>();                          // unk3, 0
+    recv_data.read_skip<uint32>();                          // unk4, 0
 
-    recv_data >> unk1 >> unk2;
-    // note: the packet might contain more data, but the exact structure of that is unknown
-
-    sLog.outDebug("TicketCreate: map %u, x %f, y %f, z %f, text %s, unk1 %u, unk2 %u", map, x, y, z, ticketText.c_str(), unk1, unk2);
+    sLog.outDebug("TicketCreate: map %u, x %f, y %f, z %f, text %s", map, x, y, z, ticketText.c_str());
 
     if(ticketmgr.GetGMTicket(GetPlayer()->GetGUIDLow()))
     {
         WorldPacket data( SMSG_GMTICKET_CREATE, 4 );
-        data << uint32(1);
+        data << uint32(1);                                  // 1 - You already have GM ticket
         SendPacket( &data );
         return;
     }
@@ -117,13 +111,13 @@ void WorldSession::HandleGMTicketCreateOpcode( WorldPacket & recv_data )
     SendPacket( &data );
 
     data.Initialize( SMSG_GMTICKET_CREATE, 4 );
-    data << uint32(2);
+    data << uint32(2);                                      // 2 - nothing appears (3-error creating, 5-error updating)
     SendPacket( &data );
-    DEBUG_LOG("update the ticket\n");
+    DEBUG_LOG("update the ticket");
 
     //TODO: Guard player map
     HashMapHolder<Player>::MapType &m = ObjectAccessor::Instance().GetPlayers();
-    for(HashMapHolder<Player>::MapType::iterator itr = m.begin(); itr != m.end(); ++itr)
+    for(HashMapHolder<Player>::MapType::const_iterator itr = m.begin(); itr != m.end(); ++itr)
     {
         if(itr->second->GetSession()->GetSecurity() >= SEC_GAMEMASTER && itr->second->isAcceptTickets())
             ChatHandler(itr->second).PSendSysMessage(LANG_COMMAND_TICKETNEW,GetPlayer()->GetName());
@@ -132,7 +126,7 @@ void WorldSession::HandleGMTicketCreateOpcode( WorldPacket & recv_data )
 
 void WorldSession::HandleGMTicketSystemStatusOpcode( WorldPacket & /*recv_data*/ )
 {
-    WorldPacket data( SMSG_GMTICKET_SYSTEMSTATUS,4 );
+    WorldPacket data( SMSG_GMTICKET_SYSTEMSTATUS, 4 );
     data << uint32(1);                                      // we can also disable ticket system by sending 0 value
 
     SendPacket( &data );
@@ -141,7 +135,6 @@ void WorldSession::HandleGMTicketSystemStatusOpcode( WorldPacket & /*recv_data*/
 void WorldSession::HandleGMSurveySubmit( WorldPacket & recv_data)
 {
     // GM survey is shown after SMSG_GM_TICKET_STATUS_UPDATE with status = 3
-    CHECK_PACKET_SIZE(recv_data,4+4);
     uint32 x;
     recv_data >> x;                                         // answer range? (6 = 0-5?)
     sLog.outDebug("SURVEY: X = %u", x);
@@ -150,13 +143,11 @@ void WorldSession::HandleGMSurveySubmit( WorldPacket & recv_data)
     memset(result, 0, sizeof(result));
     for( int i = 0; i < 10; ++i)
     {
-        CHECK_PACKET_SIZE(recv_data,recv_data.rpos()+4);
         uint32 questionID;
         recv_data >> questionID;                            // GMSurveyQuestions.dbc
         if (!questionID)
             break;
 
-        CHECK_PACKET_SIZE(recv_data,recv_data.rpos()+1+1);
         uint8 value;
         std::string unk_text;
         recv_data >> value;                                 // answer
@@ -166,7 +157,6 @@ void WorldSession::HandleGMSurveySubmit( WorldPacket & recv_data)
         sLog.outDebug("SURVEY: ID %u, value %u, text %s", questionID, value, unk_text.c_str());
     }
 
-    CHECK_PACKET_SIZE(recv_data,recv_data.rpos()+1);
     std::string comment;
     recv_data >> comment;                                   // addional comment
     sLog.outDebug("SURVEY: comment %s", comment.c_str());

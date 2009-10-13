@@ -20,6 +20,7 @@
 #define __SPELL_H
 
 #include "GridDefines.h"
+#include "SharedDefines.h"
 
 class WorldSession;
 class Unit;
@@ -31,19 +32,6 @@ class Aura;
 
 enum SpellCastTargetFlags
 {
-    /*TARGET_FLAG_NONE             = 0x0000,
-    TARGET_FLAG_SWIMMER          = 0x0002,
-    TARGET_FLAG_ITEM             = 0x0010,
-    TARGET_FLAG_SOURCE_AREA      = 0x0020,
-    TARGET_FLAG_DEST_AREA        = 0x0040,
-    TARGET_FLAG_UNKNOWN          = 0x0080,
-    TARGET_FLAG_SELF             = 0x0100,
-    TARGET_FLAG_PVP_CORPSE       = 0x0200,
-    TARGET_FLAG_MASS_SPIRIT_HEAL = 0x0400,
-    TARGET_FLAG_BEAST_CORPSE     = 0x0402,
-    TARGET_FLAG_OBJECT           = 0x4000,
-    TARGET_FLAG_RESURRECTABLE    = 0x8000*/
-
     TARGET_FLAG_SELF            = 0x00000000,
     TARGET_FLAG_UNUSED1         = 0x00000001,               // not used in any spells as of 3.0.3 (can be set dynamically)
     TARGET_FLAG_UNIT            = 0x00000002,               // pguid
@@ -89,12 +77,16 @@ enum SpellCastFlags
     CAST_FLAG_UNKNOWN10          = 0x00040000,
     CAST_FLAG_UNKNOWN5           = 0x00080000,              // wotlk
     CAST_FLAG_UNKNOWN20          = 0x00100000,
-    CAST_FLAG_UNKNOWN7           = 0x00200000               // wotlk, rune cooldown list
+    CAST_FLAG_UNKNOWN7           = 0x00200000,              // wotlk, rune cooldown list
+    CAST_FLAG_UNKNOWN21          = 0x04000000
 };
 
 enum SpellNotifyPushType
 {
     PUSH_IN_FRONT,
+    PUSH_IN_FRONT_90,
+    PUSH_IN_FRONT_30,
+    PUSH_IN_FRONT_15,
     PUSH_IN_BACK,
     PUSH_SELF_CENTER,
     PUSH_DEST_CENTER,
@@ -150,6 +142,7 @@ class SpellCastTargets
         Unit *getUnitTarget() const { return m_unitTarget; }
         void setUnitTarget(Unit *target);
         void setDestination(float x, float y, float z);
+        void setSource(float x, float y, float z);
 
         uint64 getGOTargetGUID() const { return m_GOTargetGUID; }
         GameObject *getGOTarget() const { return m_GOTarget; }
@@ -203,7 +196,16 @@ enum SpellState
     SPELL_STATE_DELAYED   = 5
 };
 
-#define SPELL_SPELL_CHANNEL_UPDATE_INTERVAL 1000
+enum SpellTargets
+{
+    SPELL_TARGETS_HOSTILE,
+    SPELL_TARGETS_NOT_FRIENDLY,
+    SPELL_TARGETS_NOT_HOSTILE,
+    SPELL_TARGETS_FRIENDLY,
+    SPELL_TARGETS_AOE_DAMAGE
+};
+
+#define SPELL_SPELL_CHANNEL_UPDATE_INTERVAL (1*IN_MILISECONDS)
 
 typedef std::multimap<uint64, uint64> SpellTargetTimeMap;
 
@@ -211,6 +213,7 @@ class Spell
 {
     friend struct MaNGOS::SpellNotifierPlayer;
     friend struct MaNGOS::SpellNotifierCreatureAndPlayer;
+    friend void Unit::SetCurrentCastedSpell( Spell * pSpell );
     public:
 
         void EffectNULL(uint32 );
@@ -230,11 +233,12 @@ class Spell
         void EffectHealthLeech(uint32 i);
         void EffectQuestComplete(uint32 i);
         void EffectCreateItem(uint32 i);
+        void EffectCreateItem2(uint32 i);
+        void EffectCreateRandomItem(uint32 i);
         void EffectPersistentAA(uint32 i);
         void EffectEnergize(uint32 i);
         void EffectOpenLock(uint32 i);
         void EffectSummonChangeItem(uint32 i);
-        void EffectOpenSecretSafe(uint32 i);
         void EffectProficiency(uint32 i);
         void EffectApplyAreaAura(uint32 i);
         void EffectSummonType(uint32 i);
@@ -247,6 +251,7 @@ class Spell
         void EffectSummonWild(uint32 i);
         void EffectSummonGuardian(uint32 i);
         void EffectHealMechanical(uint32 i);
+        void EffectJump(uint32 i);
         void EffectTeleUnitsFaceCaster(uint32 i);
         void EffectLearnSkill(uint32 i);
         void EffectAddHonor(uint32 i);
@@ -278,7 +283,8 @@ class Spell
         void EffectResurrect(uint32 i);
         void EffectParry(uint32 i);
         void EffectBlock(uint32 i);
-        void EffectMomentMove(uint32 i);
+        void EffectLeapForward(uint32 i);
+        void EffectLeapBack(uint32 i);
         void EffectTransmitted(uint32 i);
         void EffectDisEnchant(uint32 i);
         void EffectInebriate(uint32 i);
@@ -288,8 +294,10 @@ class Spell
         void EffectSelfResurrect(uint32 i);
         void EffectSkinning(uint32 i);
         void EffectCharge(uint32 i);
+        void EffectCharge2(uint32 i);
         void EffectProspecting(uint32 i);
         void EffectMilling(uint32 i);
+        void EffectRenamePet(uint32 i);
         void EffectSendTaxi(uint32 i);
         void EffectSummonCritter(uint32 i);
         void EffectKnockBack(uint32 i);
@@ -313,28 +321,29 @@ class Spell
         void EffectEnergisePct(uint32 i);
         void EffectTriggerSpellWithValue(uint32 i);
         void EffectTriggerRitualOfSummoning(uint32 i);
+        void EffectKillCreditPersonal(uint32 i);
         void EffectKillCredit(uint32 i);
         void EffectQuestFail(uint32 i);
         void EffectActivateRune(uint32 i);
         void EffectTitanGrip(uint32 i);
+        void EffectEnchantItemPrismatic(uint32 i);
+        void EffectPlayMusic(uint32 i);
 
         Spell( Unit* Caster, SpellEntry const *info, bool triggered, uint64 originalCasterGUID = 0, Spell** triggeringContainer = NULL );
         ~Spell();
 
-        void prepare(SpellCastTargets * targets, Aura* triggeredByAura = NULL);
+        void prepare(SpellCastTargets const* targets, Aura* triggeredByAura = NULL);
         void cancel();
         void update(uint32 difftime);
         void cast(bool skipCheck = false);
         void finish(bool ok = true);
         void TakePower();
-        uint8 CheckRuneCost(uint32 runeCostID);
         void TakeRunePower();
         void TakeReagents();
         void TakeCastItem();
-        void TriggerSpell();
-        uint8 CanCast(bool strict);
-        int16 PetCanCast(Unit* target);
-        bool CanAutoCast(Unit* target);
+
+        SpellCastResult CheckCast(bool strict);
+        SpellCastResult CheckPetCast(Unit* target);
 
         // handlers
         void handle_immediate();
@@ -343,10 +352,11 @@ class Spell
         void _handle_immediate_phase();
         void _handle_finish_phase();
 
-        uint8 CheckItems();
-        uint8 CheckRange(bool strict);
-        uint8 CheckPower();
-        uint8 CheckCasterAuras() const;
+        SpellCastResult CheckItems();
+        SpellCastResult CheckRange(bool strict);
+        SpellCastResult CheckPower();
+        SpellCastResult CheckRuneCost(uint32 runeCostID);
+        SpellCastResult CheckCasterAuras() const;
 
         int32 CalculateDamage(uint8 i, Unit* target) { return m_caster->CalculateSpellDamage(m_spellInfo,i,m_currentBasePoints[i],target); }
         int32 CalculatePowerCost();
@@ -354,21 +364,29 @@ class Spell
         bool HaveTargetsForEffect(uint8 effect) const;
         void Delayed();
         void DelayedChannel();
-        inline uint32 getState() const { return m_spellState; }
+        uint32 getState() const { return m_spellState; }
         void setState(uint32 state) { m_spellState = state; }
 
         void DoCreateItem(uint32 i, uint32 itemtype);
-
         void WriteSpellGoTargets( WorldPacket * data );
         void WriteAmmoToPacket( WorldPacket * data );
+
+        typedef std::list<Unit*> UnitList;
         void FillTargetMap();
+        void SetTargetMap(uint32 effIndex,uint32 targetMode,UnitList& TagUnitMap);
 
-        void SetTargetMap(uint32 i,uint32 cur,std::list<Unit*> &TagUnitMap);
+        void FillAreaTargets( UnitList& TagUnitMap, float x, float y, float radius, SpellNotifyPushType pushType, SpellTargets spellTargets );
+        void FillRaidOrPartyTargets( UnitList &TagUnitMap, Unit* member, Unit* center, float radius, bool raid, bool withPets, bool withcaster );
+        void FillRaidOrPartyManaPriorityTargets( UnitList &TagUnitMap, Unit* member, Unit* center, float radius, uint32 count, bool raid, bool withPets, bool withcaster );
+        void FillRaidOrPartyHealthPriorityTargets( UnitList &TagUnitMap, Unit* member, Unit* center, float radius, uint32 count, bool raid, bool withPets, bool withcaster );
 
-        Unit* SelectMagnetTarget();
+        template<typename T> WorldObject* FindCorpseUsing();
+
         bool CheckTarget( Unit* target, uint32 eff );
+        bool CanAutoCast(Unit* target);
 
-        void SendCastResult(uint8 result);
+        static void MANGOS_DLL_SPEC SendCastResult(Player* caster, SpellEntry const* spellInfo, uint8 cast_count, SpellCastResult result);
+        void SendCastResult(SpellCastResult result);
         void SendSpellStart();
         void SendSpellGo();
         void SendSpellCooldown();
@@ -391,6 +409,7 @@ class Spell
         SpellCastTargets m_targets;
 
         int32 GetCastTime() const { return m_casttime; }
+        uint32 GetCastedTime() { return m_timer; }
         bool IsAutoRepeat() const { return m_autoRepeat; }
         void SetAutoRepeat(bool rep) { m_autoRepeat = rep; }
         void ReSetTimer() { m_timer = m_casttime > 0 ? m_casttime : 0; }
@@ -427,7 +446,12 @@ class Spell
 
         bool CheckTargetCreatureType(Unit* target) const;
 
-        void AddTriggeredSpell(SpellEntry const* spell) { m_TriggerSpells.push_back(spell); }
+        void AddTriggeredSpell(SpellEntry const* spellInfo) { m_TriggerSpells.push_back(spellInfo); }
+        void AddPrecastSpell(SpellEntry const* spellInfo) { m_preCastSpells.push_back(spellInfo); }
+        void AddTriggeredSpell(uint32 spellId);
+        void AddPrecastSpell(uint32 spellId);
+        void CastPreCastSpells(Unit* target);
+        void CastTriggerSpells();
 
         void CleanupTargetList();
     protected:
@@ -453,7 +477,14 @@ class Spell
         uint8 m_runesState;
 
         uint8 m_delayAtDamageCount;
-        int32 GetNextDelayAtDamageMsTime() { return m_delayAtDamageCount < 5 ? 1000 - (m_delayAtDamageCount++)* 200 : 200; }
+        bool isDelayableNoMore()
+        {
+            if(m_delayAtDamageCount >= 2)
+                return true;
+
+            m_delayAtDamageCount++;
+            return false;
+        }
 
         // Delayed spells system
         uint64 m_delayStart;                                // time of spell delay start, filled by event handler, zero = just started
@@ -497,8 +528,6 @@ class Spell
         // Spell target subsystem
         //*****************************************
         // Targets store structures and data
-        uint32 m_countOfHit;
-        uint32 m_countOfMiss;
         struct TargetInfo
         {
             uint64 targetGUID;
@@ -537,11 +566,13 @@ class Spell
         void DoAllEffectOnTarget(GOTargetInfo *target);
         void DoAllEffectOnTarget(ItemTargetInfo *target);
         bool IsAliveUnitPresentInTargetList();
+        SpellCastResult CanOpenLock(uint32 effIndex, uint32 lockid, SkillType& skillid, int32& reqSkillValue, int32& skillValue);
         // -------------------------------------------
 
         //List For Triggered Spells
-        typedef std::list<SpellEntry const*> TriggerSpells;
-        TriggerSpells m_TriggerSpells;
+        typedef std::list<SpellEntry const*> SpellInfoList;
+        SpellInfoList m_TriggerSpells;                      // casted by caster to same targets settings in m_targets at success finish of current spell
+        SpellInfoList m_preCastSpells;                      // casted by caster to each target at spell hit before spell effects apply
 
         uint32 m_spellState;
         uint32 m_timer;
@@ -564,15 +595,6 @@ enum ReplenishType
     REPLENISH_HEALTH    = 20,
     REPLENISH_MANA      = 21,
     REPLENISH_RAGE      = 22
-};
-
-enum SpellTargets
-{
-    SPELL_TARGETS_HOSTILE,
-    SPELL_TARGETS_NOT_FRIENDLY,
-    SPELL_TARGETS_NOT_HOSTILE,
-    SPELL_TARGETS_FRIENDLY,
-    SPELL_TARGETS_AOE_DAMAGE
 };
 
 namespace MaNGOS
@@ -605,7 +627,7 @@ namespace MaNGOS
                 if( i_originalCaster->IsFriendlyTo(pPlayer) )
                     continue;
 
-                if( pPlayer->GetDistance(i_spell.m_targets.m_destX, i_spell.m_targets.m_destY, i_spell.m_targets.m_destZ) < i_radius )
+                if( pPlayer->IsWithinDist3d(i_spell.m_targets.m_destX, i_spell.m_targets.m_destY, i_spell.m_targets.m_destZ,i_radius))
                     i_data.push_back(pPlayer);
             }
         }
@@ -616,12 +638,12 @@ namespace MaNGOS
     {
         std::list<Unit*> *i_data;
         Spell &i_spell;
-        const uint32& i_push_type;
+        SpellNotifyPushType i_push_type;
         float i_radius;
         SpellTargets i_TargetType;
         Unit* i_originalCaster;
 
-        SpellNotifierCreatureAndPlayer(Spell &spell, std::list<Unit*> &data, float radius, const uint32 &type,
+        SpellNotifierCreatureAndPlayer(Spell &spell, std::list<Unit*> &data, float radius, SpellNotifyPushType type,
             SpellTargets TargetType = SPELL_TARGETS_NOT_FRIENDLY)
             : i_data(&data), i_spell(spell), i_push_type(type), i_radius(radius), i_TargetType(TargetType)
         {
@@ -637,32 +659,34 @@ namespace MaNGOS
 
             for(typename GridRefManager<T>::iterator itr = m.begin(); itr != m.end(); ++itr)
             {
-                if( !itr->getSource()->isAlive() || (itr->getSource()->GetTypeId() == TYPEID_PLAYER && ((Player*)itr->getSource())->isInFlight()))
+                // there are still more spells which can be casted on dead, but
+                // they are no AOE and don't have such a nice SPELL_ATTR flag
+                if ( !itr->getSource()->isTargetableForAttack(i_spell.m_spellInfo->AttributesEx3 & SPELL_ATTR_EX3_CAST_ON_DEAD)
+                    // mostly phase check
+                    || !itr->getSource()->IsInMap(i_originalCaster))
                     continue;
 
                 switch (i_TargetType)
                 {
                     case SPELL_TARGETS_HOSTILE:
-                        if (!itr->getSource()->isTargetableForAttack() || !i_originalCaster->IsHostileTo( itr->getSource() ))
+                        if (!i_originalCaster->IsHostileTo( itr->getSource() ))
                             continue;
                         break;
                     case SPELL_TARGETS_NOT_FRIENDLY:
-                        if (!itr->getSource()->isTargetableForAttack() || i_originalCaster->IsFriendlyTo( itr->getSource() ))
+                        if (i_originalCaster->IsFriendlyTo( itr->getSource() ))
                             continue;
                         break;
                     case SPELL_TARGETS_NOT_HOSTILE:
-                        if (!itr->getSource()->isTargetableForAttack() || i_originalCaster->IsHostileTo( itr->getSource() ))
+                        if (i_originalCaster->IsHostileTo( itr->getSource() ))
                             continue;
                         break;
                     case SPELL_TARGETS_FRIENDLY:
-                        if (!itr->getSource()->isTargetableForAttack() || !i_originalCaster->IsFriendlyTo( itr->getSource() ))
+                        if (!i_originalCaster->IsFriendlyTo( itr->getSource() ))
                             continue;
                         break;
                     case SPELL_TARGETS_AOE_DAMAGE:
                     {
                         if(itr->getSource()->GetTypeId()==TYPEID_UNIT && ((Creature*)itr->getSource())->isTotem())
-                            continue;
-                        if(!itr->getSource()->isTargetableForAttack())
                             continue;
 
                         Unit* check = i_originalCaster->GetCharmerOrOwnerOrSelf();
@@ -685,23 +709,35 @@ namespace MaNGOS
                 switch(i_push_type)
                 {
                     case PUSH_IN_FRONT:
-                        if(i_spell.GetCaster()->isInFront((Unit*)(itr->getSource()), i_radius, 2*M_PI/3 ))
+                        if(i_spell.GetCaster()->isInFrontInMap((Unit*)(itr->getSource()), i_radius, 2*M_PI/3 ))
+                            i_data->push_back(itr->getSource());
+                        break;
+                    case PUSH_IN_FRONT_90:
+                        if(i_spell.GetCaster()->isInFrontInMap((Unit*)(itr->getSource()), i_radius, M_PI/2 ))
+                            i_data->push_back(itr->getSource());
+                        break;
+                    case PUSH_IN_FRONT_30:
+                        if(i_spell.GetCaster()->isInFrontInMap((Unit*)(itr->getSource()), i_radius, M_PI/6 ))
+                            i_data->push_back(itr->getSource());
+                        break;
+                    case PUSH_IN_FRONT_15:
+                        if(i_spell.GetCaster()->isInFrontInMap((Unit*)(itr->getSource()), i_radius, M_PI/12 ))
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_IN_BACK:
-                        if(i_spell.GetCaster()->isInBack((Unit*)(itr->getSource()), i_radius, 2*M_PI/3 ))
+                        if(i_spell.GetCaster()->isInBackInMap((Unit*)(itr->getSource()), i_radius, 2*M_PI/3 ))
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_SELF_CENTER:
-                        if(i_spell.GetCaster()->IsWithinDistInMap((Unit*)(itr->getSource()), i_radius))
+                        if(i_spell.GetCaster()->IsWithinDist((Unit*)(itr->getSource()), i_radius))
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_DEST_CENTER:
-                        if((itr->getSource()->GetDistance(i_spell.m_targets.m_destX, i_spell.m_targets.m_destY, i_spell.m_targets.m_destZ) < i_radius ))
+                        if(itr->getSource()->IsWithinDist3d(i_spell.m_targets.m_destX, i_spell.m_targets.m_destY, i_spell.m_targets.m_destZ,i_radius))
                             i_data->push_back(itr->getSource());
                         break;
                     case PUSH_TARGET_CENTER:
-                        if(i_spell.m_targets.getUnitTarget()->IsWithinDistInMap((Unit*)(itr->getSource()), i_radius))
+                        if(i_spell.m_targets.getUnitTarget()->IsWithinDist((Unit*)(itr->getSource()), i_radius))
                             i_data->push_back(itr->getSource());
                         break;
                 }

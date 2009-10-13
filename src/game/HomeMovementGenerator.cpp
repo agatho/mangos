@@ -18,9 +18,8 @@
 
 #include "HomeMovementGenerator.h"
 #include "Creature.h"
+#include "CreatureAI.h"
 #include "Traveller.h"
-#include "MapManager.h"
-#include "ObjectAccessor.h"
 #include "DestinationHolderImp.h"
 #include "ObjectMgr.h"
 #include "WorldPacket.h"
@@ -28,7 +27,7 @@
 void
 HomeMovementGenerator<Creature>::Initialize(Creature & owner)
 {
-    owner.RemoveUnitMovementFlag(MOVEMENTFLAG_WALK_MODE);
+    owner.RemoveMonsterMoveFlag(MONSTER_MOVE_WALK);
     _setTargetLocation(owner);
 }
 
@@ -43,7 +42,7 @@ HomeMovementGenerator<Creature>::_setTargetLocation(Creature & owner)
     if( !&owner )
         return;
 
-    if( owner.hasUnitState(UNIT_STAT_ROOT | UNIT_STAT_STUNNED | UNIT_STAT_DISTRACTED) )
+    if( owner.hasUnitState(UNIT_STAT_ROOT | UNIT_STAT_STUNNED | UNIT_STAT_DISTRACTED | UNIT_STAT_DIED) )
         return;
 
     float x, y, z;
@@ -64,7 +63,7 @@ HomeMovementGenerator<Creature>::Update(Creature &owner, const uint32& time_diff
 
     if (time_diff > i_travel_timer)
     {
-        owner.AddUnitMovementFlag(MOVEMENTFLAG_WALK_MODE);
+        owner.AddMonsterMoveFlag(MONSTER_MOVE_WALK);
 
         // restore orientation of not moving creature at returning to home
         if(owner.GetDefaultMovementType()==IDLE_MOTION_TYPE)
@@ -77,6 +76,8 @@ HomeMovementGenerator<Creature>::Update(Creature &owner, const uint32& time_diff
                 owner.SendMessageToSet(&packet, false);
             }
         }
+
+        owner.AI()->JustReachedHome();
         return false;
     }
 

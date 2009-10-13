@@ -21,7 +21,9 @@
 
 #include "GroupReference.h"
 #include "GroupRefManager.h"
+#include "BattleGround.h"
 #include "LootMgr.h"
+#include "DBCEnums.h"
 
 #include <map>
 #include <vector>
@@ -248,7 +250,7 @@ class MANGOS_DLL_SPEC Group
         void ConvertToRaid();
 
         void SetBattlegroundGroup(BattleGround *bg) { m_bgGroup = bg; }
-        uint32 CanJoinBattleGroundQueue(uint32 bgTypeId, uint32 bgQueueType, uint32 MinPlayerCount, uint32 MaxPlayerCount, bool isRated, uint32 arenaSlot);
+        uint32 CanJoinBattleGroundQueue(BattleGroundTypeId bgTypeId, BattleGroundQueueTypeId bgQueueTypeId, uint32 MinPlayerCount, uint32 MaxPlayerCount, bool isRated, uint32 arenaSlot);
 
         void ChangeMembersGroup(const uint64 &guid, const uint8 &group);
         void ChangeMembersGroup(Player *player, const uint8 &group);
@@ -278,11 +280,15 @@ class MANGOS_DLL_SPEC Group
         }
 
         void SetTargetIcon(uint8 id, uint64 guid);
-        void SetDifficulty(uint8 difficulty);
-        uint8 GetDifficulty() { return m_difficulty; }
+
+        Difficulty GetDifficulty(bool isRaid) const { return isRaid ? m_raidDifficulty : m_dungeonDifficulty; }
+        Difficulty GetDungeonDifficulty() const { return m_dungeonDifficulty; }
+        Difficulty GetRaidDifficulty() const { return m_raidDifficulty; }
+        void SetDungeonDifficulty(Difficulty difficulty);
+        void SetRaidDifficulty(Difficulty difficulty);
         uint16 InInstance();
         bool InCombatToInstance(uint32 instanceId);
-        void ResetInstances(uint8 method, Player* SendMsgTo);
+        void ResetInstances(uint8 method, bool isRaid, Player* SendMsgTo);
 
         // -no description-
         //void SendInit(WorldSession *session);
@@ -290,7 +296,7 @@ class MANGOS_DLL_SPEC Group
         void SendUpdate();
         void UpdatePlayerOutOfRange(Player* pPlayer);
                                                             // ignore: GUID of player that will be ignored
-        void BroadcastPacket(WorldPacket *packet, int group=-1, uint64 ignore=0);
+        void BroadcastPacket(WorldPacket *packet, bool ignorePlayersInBGRaid, int group=-1, uint64 ignore=0);
         void BroadcastReadyCheck(WorldPacket *packet);
         void OfflineReadyCheck();
 
@@ -326,8 +332,9 @@ class MANGOS_DLL_SPEC Group
 
         InstanceGroupBind* BindToInstance(InstanceSave *save, bool permanent, bool load = false);
         void UnbindInstance(uint32 mapid, uint8 difficulty, bool unload = false);
-        InstanceGroupBind* GetBoundInstance(uint32 mapid, uint8 difficulty);
-        BoundInstancesMap& GetBoundInstances(uint8 difficulty) { return m_boundInstances[difficulty]; }
+        InstanceGroupBind* GetBoundInstance(Player* player);
+        InstanceGroupBind* GetBoundInstance(Map* aMap);
+        BoundInstancesMap& GetBoundInstances(Difficulty difficulty) { return m_boundInstances[difficulty]; }
 
     protected:
         bool _addMember(const uint64 &guid, const char* name, bool isAssistant=false);
@@ -396,14 +403,15 @@ class MANGOS_DLL_SPEC Group
         uint64              m_mainTank;
         uint64              m_mainAssistant;
         GroupType           m_groupType;
-        uint8               m_difficulty;
+        Difficulty          m_dungeonDifficulty;
+        Difficulty          m_raidDifficulty;
         BattleGround*       m_bgGroup;
         uint64              m_targetIcons[TARGETICONCOUNT];
         LootMethod          m_lootMethod;
         ItemQualities       m_lootThreshold;
         uint64              m_looterGuid;
         Rolls               RollId;
-        BoundInstancesMap   m_boundInstances[TOTAL_DIFFICULTIES];
+        BoundInstancesMap   m_boundInstances[MAX_DIFFICULTY];
         uint8*              m_subGroupsCounts;
 };
 #endif
