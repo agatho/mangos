@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #include "InstanceSaveMgr.h"
 #include "World.h"
 
-MapInstanced::MapInstanced(uint32 id, time_t expiry) : Map(id, expiry, 0, 0)
+MapInstanced::MapInstanced(uint32 id, time_t expiry) : Map(id, expiry, 0, DUNGEON_DIFFICULTY_NORMAL)
 {
     // initialize instanced maps list
     m_InstancedMaps.clear();
@@ -166,8 +166,10 @@ Map* MapInstanced::CreateInstance(const uint32 mapId, Player * player)
         {
             // if no instanceId via group members or instance saves is found
             // the instance will be created for the first time
-            NewInstanceId = MapManager::Instance().GenerateInstanceId();
-            map = CreateInstance(NewInstanceId, NULL, player->GetDifficulty(IsRaid()));
+            NewInstanceId = sMapMgr.GenerateInstanceId();
+
+            Difficulty diff = player->GetGroup() ? player->GetGroup()->GetDifficulty(IsRaid()) : player->GetDifficulty(IsRaid());
+            map = CreateInstance(NewInstanceId, NULL, diff);
         }
     }
 
@@ -180,22 +182,19 @@ InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave *save,
     Guard guard(*this);
 
     // make sure we have a valid map id
-    const MapEntry* entry = sMapStore.LookupEntry(GetId());
-    if(!entry)
+    if (!sMapStore.LookupEntry(GetId()))
     {
         sLog.outError("CreateInstance: no entry for map %d", GetId());
         assert(false);
     }
-    const InstanceTemplate * iTemplate = objmgr.GetInstanceTemplate(GetId());
-    if(!iTemplate)
+    if (!ObjectMgr::GetInstanceTemplate(GetId()))
     {
         sLog.outError("CreateInstance: no instance template for map %d", GetId());
         assert(false);
     }
 
     // some instances only have one difficulty
-    MapDifficulty const* mapDiff = GetMapDifficultyData(GetId(),difficulty);
-    if (!mapDiff)
+    if (!GetMapDifficultyData(GetId(),difficulty))
         difficulty = DUNGEON_DIFFICULTY_NORMAL;
 
     sLog.outDebug("MapInstanced::CreateInstance: %s map instance %d for %d created with difficulty %s", save?"":"new ", InstanceId, GetId(), difficulty?"heroic":"normal");
@@ -217,7 +216,11 @@ BattleGroundMap* MapInstanced::CreateBattleGroundMap(uint32 InstanceId, BattleGr
 
     sLog.outDebug("MapInstanced::CreateBattleGroundMap: instance:%d for map:%d and bgType:%d created.", InstanceId, GetId(), bg->GetTypeID());
 
-    BattleGroundMap *map = new BattleGroundMap(GetId(), GetGridExpiry(), InstanceId, this);
+    PvPDifficultyEntry const* bracketEntry = GetBattlegroundBracketByLevel(bg->GetMapId(),bg->GetMinLevel());
+
+    uint8 spawnMode = bracketEntry ? bracketEntry->difficulty : REGULAR_DIFFICULTY;
+
+    BattleGroundMap *map = new BattleGroundMap(GetId(), GetGridExpiry(), InstanceId, this, spawnMode);
     ASSERT(map->IsBattleGroundOrArena());
     map->SetBG(bg);
     bg->SetBgMap(map);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ static void AttemptJoin(Player* _player)
         return;
 
     //TODO: Guard Player Map
-    HashMapHolder<Player>::MapType const& players = ObjectAccessor::Instance().GetPlayers();
+    HashMapHolder<Player>::MapType const& players = sObjectAccessor.GetPlayers();
     for(HashMapHolder<Player>::MapType::const_iterator iter = players.begin(); iter != players.end(); ++iter)
     {
         Player *plr = iter->second;
@@ -45,7 +45,7 @@ static void AttemptJoin(Player* _player)
             continue;
 
         // skip not auto add, not group leader cases
-        if(!plr->GetSession()->LookingForGroup_auto_add || plr->GetGroup() && plr->GetGroup()->GetLeaderGUID()!=plr->GetGUID())
+        if (!plr->GetSession()->LookingForGroup_auto_add || (plr->GetGroup() && plr->GetGroup()->GetLeaderGUID()!=plr->GetGUID()))
             continue;
 
         // skip non auto-join or empty slots, or non compatible slots
@@ -62,7 +62,7 @@ static void AttemptJoin(Player* _player)
                 continue;
             }
 
-            objmgr.AddGroup(group);
+            sObjectMgr.AddGroup(group);
         }
 
         // stop at success join
@@ -91,7 +91,7 @@ static void AttemptAddMore(Player* _player)
         return;
 
     //TODO: Guard Player map
-    HashMapHolder<Player>::MapType const& players = ObjectAccessor::Instance().GetPlayers();
+    HashMapHolder<Player>::MapType const& players = sObjectAccessor.GetPlayers();
     for(HashMapHolder<Player>::MapType::const_iterator iter = players.begin(); iter != players.end(); ++iter)
     {
         Player *plr = iter->second;
@@ -120,7 +120,7 @@ static void AttemptAddMore(Player* _player)
                 return;                                     // can't create group (??)
             }
 
-            objmgr.AddGroup(group);
+            sObjectMgr.AddGroup(group);
         }
 
         // stop at join fail (full)
@@ -258,51 +258,51 @@ void WorldSession::HandleLookingForGroup(WorldPacket& recv_data)
 
 void WorldSession::SendLfgResult(uint32 type, uint32 entry, uint8 lfg_type)
 {
-    uint32 number = 0;
+    /*uint32 number = 0;
 
     WorldPacket data(MSG_LOOKING_FOR_GROUP);
     data << uint32(type);                                   // type
     data << uint32(entry);                                  // entry from LFGDungeons.dbc
 
     data << uint8(0);
-    /*if(uint8)
+    if(uint8)
     {
         uint32 count1;
         for(count1)
         {
             uint64; // player guid
         }
-    }*/
+    }
 
     data << uint32(0);                                      // count2
     data << uint32(0);
-    /*for(count2)
+    for(count2)
     {
         uint64 // not player guid
         uint32 flags;
         if(flags & 0x2)
         {
-            string
+            data << uint8(0); // string
         }
         if(flags & 0x10)
         {
-            uint8
+            data << uint8(0);
         }
         if(flags & 0x20)
         {
-            for(3)
+            for(int i = 0; i < 3; ++i)
             {
-                uint8
+                data << uint8(0);
             }
         }
-    }*/
+    }
 
     size_t count3_pos = data.wpos();
     data << uint32(0);                                      // count3
     data << uint32(0);                                      // unk
 
     //TODO: Guard Player map
-    HashMapHolder<Player>::MapType const& players = ObjectAccessor::Instance().GetPlayers();
+    HashMapHolder<Player>::MapType const& players = sObjectAccessor.GetPlayers();
     for(HashMapHolder<Player>::MapType::const_iterator iter = players.begin(); iter != players.end(); ++iter)
     {
         Player *plr = iter->second;
@@ -386,7 +386,7 @@ void WorldSession::SendLfgResult(uint32 type, uint32 entry, uint8 lfg_type)
 
     data.put<uint32>(count3_pos, number);                   // fill count placeholder
 
-    SendPacket(&data);
+    SendPacket(&data);*/
 }
 
 void WorldSession::HandleSetLfgOpcode( WorldPacket & recv_data )
@@ -427,9 +427,10 @@ void WorldSession::HandleLfgSetRoles(WorldPacket &recv_data)
 
 void WorldSession::SendLfgUpdate(uint8 unk1, uint8 unk2, uint8 unk3)
 {
-    WorldPacket data(SMSG_LFG_UPDATE, 3);
+    // disabled
+    /*WorldPacket data(SMSG_LFG_UPDATE, 3);
     data << uint8(unk1);
     data << uint8(unk2);
     data << uint8(unk3);
-    SendPacket(&data);
+    SendPacket(&data);*/
 }

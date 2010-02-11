@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -113,7 +113,7 @@ bool ChatHandler::HandleNpcWhisperCommand(const char* args)
     uint64 receiver_guid= atol(receiver_str);
 
     // check online security
-    if (HasLowerSecurity(objmgr.GetPlayer(receiver_guid), 0))
+    if (HasLowerSecurity(sObjectMgr.GetPlayer(receiver_guid), 0))
         return false;
 
     pCreature->MonsterWhisper(text,receiver_guid);
@@ -393,7 +393,8 @@ bool ChatHandler::HandleNamegoCommand(const char* args)
             // when porting out from the bg, it will be reset to 0
             target->SetBattleGroundId(m_session->GetPlayer()->GetBattleGroundId(), m_session->GetPlayer()->GetBattleGroundTypeId());
             // remember current position as entry point for return at bg end teleportation
-            target->SetBattleGroundEntryPoint();
+            if (!target->GetMap()->IsBattleGroundOrArena())
+                target->SetBattleGroundEntryPoint();
         }
         else if (pMap->IsDungeon())
         {
@@ -507,7 +508,8 @@ bool ChatHandler::HandleGonameCommand(const char* args)
             // when porting out from the bg, it will be reset to 0
             _player->SetBattleGroundId(target->GetBattleGroundId(), target->GetBattleGroundTypeId());
             // remember current position as entry point for return at bg end teleportation
-            _player->SetBattleGroundEntryPoint();
+            if (!_player->GetMap()->IsBattleGroundOrArena())
+                _player->SetBattleGroundEntryPoint();
         }
         else if(cMap->IsDungeon())
         {
@@ -545,7 +547,7 @@ bool ChatHandler::HandleGonameCommand(const char* args)
                 InstanceGroupBind *gBind = group ? group->GetBoundInstance(target) : NULL;
                 // if no bind exists, create a solo bind
                 if (!gBind)
-                    if (InstanceSave *save = sInstanceSaveManager.GetInstanceSave(target->GetInstanceId()))
+                    if (InstanceSave *save = sInstanceSaveMgr.GetInstanceSave(target->GetInstanceId()))
                         _player->BindToInstance(save, !save->CanReset());
             }
 
@@ -634,42 +636,6 @@ bool ChatHandler::HandleRecallCommand(const char* args)
     }
 
     target->TeleportTo(target->m_recallMap, target->m_recallX, target->m_recallY, target->m_recallZ, target->m_recallO);
-    return true;
-}
-
-//Edit Player KnownTitles
-bool ChatHandler::HandleModifyKnownTitlesCommand(const char* args)
-{
-    if(!*args)
-        return false;
-
-    uint64 titles = 0;
-
-    sscanf((char*)args, UI64FMTD, &titles);
-
-    Player *chr = getSelectedPlayer();
-    if (!chr)
-    {
-        SendSysMessage(LANG_NO_CHAR_SELECTED);
-        SetSentErrorMessage(true);
-        return false;
-    }
-
-    // check online security
-    if (HasLowerSecurity(chr, 0))
-        return false;
-
-    uint64 titles2 = titles;
-
-    for(uint32 i = 1; i < sCharTitlesStore.GetNumRows(); ++i)
-        if(CharTitlesEntry const* tEntry = sCharTitlesStore.LookupEntry(i))
-            titles2 &= ~(uint64(1) << tEntry->bit_index);
-
-    titles &= ~titles2;                                     // remove not existed titles
-
-    chr->SetUInt64Value(PLAYER__FIELD_KNOWN_TITLES, titles);
-    SendSysMessage(LANG_DONE);
-
     return true;
 }
 
@@ -1170,11 +1136,11 @@ bool ChatHandler::HandleModifyASpeedCommand(const char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_ASPEED_CHANGED, GetNameLink().c_str(), ASpeed);
 
-    chr->SetSpeed(MOVE_WALK,    ASpeed,true);
-    chr->SetSpeed(MOVE_RUN,     ASpeed,true);
-    chr->SetSpeed(MOVE_SWIM,    ASpeed,true);
-    //chr->SetSpeed(MOVE_TURN,    ASpeed,true);
-    chr->SetSpeed(MOVE_FLIGHT,     ASpeed,true);
+    chr->SetSpeedRate(MOVE_WALK,   ASpeed,true);
+    chr->SetSpeedRate(MOVE_RUN,    ASpeed,true);
+    chr->SetSpeedRate(MOVE_SWIM,   ASpeed,true);
+    //chr->SetSpeed(MOVE_TURN,     ASpeed,true);
+    chr->SetSpeedRate(MOVE_FLIGHT, ASpeed,true);
     return true;
 }
 
@@ -1218,7 +1184,7 @@ bool ChatHandler::HandleModifySpeedCommand(const char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_SPEED_CHANGED, GetNameLink().c_str(), Speed);
 
-    chr->SetSpeed(MOVE_RUN,Speed,true);
+    chr->SetSpeedRate(MOVE_RUN,Speed,true);
 
     return true;
 }
@@ -1263,7 +1229,7 @@ bool ChatHandler::HandleModifySwimCommand(const char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_SWIM_SPEED_CHANGED, GetNameLink().c_str(), Swim);
 
-    chr->SetSpeed(MOVE_SWIM,Swim,true);
+    chr->SetSpeedRate(MOVE_SWIM,Swim,true);
 
     return true;
 }
@@ -1308,7 +1274,7 @@ bool ChatHandler::HandleModifyBWalkCommand(const char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_BACK_SPEED_CHANGED, GetNameLink().c_str(), BSpeed);
 
-    chr->SetSpeed(MOVE_RUN_BACK,BSpeed,true);
+    chr->SetSpeedRate(MOVE_RUN_BACK,BSpeed,true);
 
     return true;
 }
@@ -1344,7 +1310,7 @@ bool ChatHandler::HandleModifyFlyCommand(const char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_FLY_SPEED_CHANGED, GetNameLink().c_str(), FSpeed);
 
-    chr->SetSpeed(MOVE_FLIGHT,FSpeed,true);
+    chr->SetSpeedRate(MOVE_FLIGHT,FSpeed,true);
 
     return true;
 }
@@ -1356,30 +1322,33 @@ bool ChatHandler::HandleModifyScaleCommand(const char* args)
         return false;
 
     float Scale = (float)atof((char*)args);
-    if (Scale > 3.0f || Scale <= 0.0f)
+    if (Scale > 10.0f || Scale <= 0.0f)
     {
         SendSysMessage(LANG_BAD_VALUE);
         SetSentErrorMessage(true);
         return false;
     }
 
-    Player *chr = getSelectedPlayer();
-    if (chr == NULL)
+    Unit *target = getSelectedUnit();
+    if (target == NULL)
     {
-        SendSysMessage(LANG_NO_CHAR_SELECTED);
+        SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
         SetSentErrorMessage(true);
         return false;
     }
 
-    // check online security
-    if (HasLowerSecurity(chr, 0))
-        return false;
+    if (target->GetTypeId()==TYPEID_PLAYER)
+    {
+        // check online security
+        if (HasLowerSecurity((Player*)target, 0))
+            return false;
 
-    PSendSysMessage(LANG_YOU_CHANGE_SIZE, Scale, GetNameLink(chr).c_str());
-    if (needReportToTarget(chr))
-        ChatHandler(chr).PSendSysMessage(LANG_YOURS_SIZE_CHANGED, GetNameLink().c_str(), Scale);
+        PSendSysMessage(LANG_YOU_CHANGE_SIZE, Scale, GetNameLink((Player*)target).c_str());
+        if (needReportToTarget((Player*)target))
+            ChatHandler((Player*)target).PSendSysMessage(LANG_YOURS_SIZE_CHANGED, GetNameLink().c_str(), Scale);
+    }
 
-    chr->SetFloatValue(OBJECT_FIELD_SCALE_X, Scale);
+    target->SetFloatValue(OBJECT_FIELD_SCALE_X, Scale);
 
     return true;
 }
@@ -1911,7 +1880,7 @@ bool ChatHandler::HandleLookupTeleCommand(const char * args)
 
     std::ostringstream reply;
 
-    GameTeleMap const & teleMap = objmgr.GetGameTeleMap();
+    GameTeleMap const & teleMap = sObjectMgr.GetGameTeleMap();
     for(GameTeleMap::const_iterator itr = teleMap.begin(); itr != teleMap.end(); ++itr)
     {
         GameTele const* tele = &itr->second;
@@ -1967,7 +1936,7 @@ bool ChatHandler::HandleWhispersCommand(const char* args)
 //Save all players in the world
 bool ChatHandler::HandleSaveAllCommand(const char* /*args*/)
 {
-    ObjectAccessor::Instance().SaveAllPlayers();
+    sObjectAccessor.SaveAllPlayers();
     SendSysMessage(LANG_PLAYERS_SAVED);
     return true;
 }
@@ -2003,13 +1972,12 @@ bool ChatHandler::HandleSendMailCommand(const char* args)
     std::string text    = msgText;
 
     // from console show not existed sender
-    uint32 sender_guidlo = m_session ? m_session->GetPlayer()->GetGUIDLow() : 0;
+    MailSender sender(MAIL_NORMAL,m_session ? m_session->GetPlayer()->GetGUIDLow() : 0, MAIL_STATIONERY_GM);
 
-    uint32 messagetype = MAIL_NORMAL;
-    uint32 stationery = MAIL_STATIONERY_GM;
-    uint32 itemTextId = !text.empty() ? objmgr.CreateItemText( text ) : 0;
+    uint32 itemTextId = !text.empty() ? sObjectMgr.CreateItemText( text ) : 0;
 
-    WorldSession::SendMailTo(target,messagetype, stationery, sender_guidlo, GUID_LOPART(target_guid), subject, itemTextId, NULL, 0, 0, MAIL_CHECK_MASK_NONE);
+    MailDraft(subject, itemTextId)
+        .SendMailTo(MailReceiver(target,GUID_LOPART(target_guid)),sender);
 
     std::string nameLink = playerLink(target_name);
     PSendSysMessage(LANG_MAIL_SENT, nameLink.c_str());
@@ -2081,7 +2049,7 @@ bool ChatHandler::HandleTeleNameCommand(const char * args)
 
         PSendSysMessage(LANG_TELEPORTING_TO, nameLink.c_str(), GetMangosString(LANG_OFFLINE), tele->name.c_str());
         Player::SavePositionInDB(tele->mapId,tele->position_x,tele->position_y,tele->position_z,tele->orientation,
-            MapManager::Instance().GetZoneId(tele->mapId,tele->position_x,tele->position_y,tele->position_z),target_guid);
+            sMapMgr.GetZoneId(tele->mapId,tele->position_x,tele->position_y,tele->position_z),target_guid);
     }
 
     return true;
@@ -2339,7 +2307,7 @@ bool ChatHandler::HandleGoXYCommand(const char* args)
     else
         _player->SaveRecallPosition();
 
-    Map const *map = MapManager::Instance().CreateBaseMap(mapid);
+    Map const *map = sMapMgr.CreateBaseMap(mapid);
     float z = std::max(map->GetHeight(x, y, MAX_HEIGHT), map->GetWaterLevel(x, y));
 
     _player->TeleportTo(mapid, x, y, z, _player->GetOrientation());
@@ -2432,7 +2400,7 @@ bool ChatHandler::HandleGoZoneXYCommand(const char* args)
     // update to parent zone if exist (client map show only zones without parents)
     AreaTableEntry const* zoneEntry = areaEntry->zone ? GetAreaEntryByAreaID(areaEntry->zone) : areaEntry;
 
-    Map const *map = MapManager::Instance().CreateBaseMap(zoneEntry->mapid);
+    Map const *map = sMapMgr.CreateBaseMap(zoneEntry->mapid);
 
     if(map->Instanceable())
     {
@@ -2507,7 +2475,7 @@ bool ChatHandler::HandleGoGridCommand(const char* args)
     else
         _player->SaveRecallPosition();
 
-    Map const *map = MapManager::Instance().CreateBaseMap(mapid);
+    Map const *map = sMapMgr.CreateBaseMap(mapid);
     float z = std::max(map->GetHeight(x, y, MAX_HEIGHT), map->GetWaterLevel(x, y));
     _player->TeleportTo(mapid, x, y, z, _player->GetOrientation());
 

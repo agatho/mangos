@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -158,7 +158,7 @@ bool ChatHandler::HandleGMListIngameCommand(const char* /*args*/)
     for(; itr != m.end(); ++itr)
     {
         AccountTypes itr_sec = itr->second->GetSession()->GetSecurity();
-        if ((itr->second->isGameMaster() || (itr_sec > SEC_PLAYER && itr_sec <= sWorld.getConfig(CONFIG_GM_LEVEL_IN_GM_LIST))) &&
+        if ((itr->second->isGameMaster() || (itr_sec > SEC_PLAYER && itr_sec <= (AccountTypes)sWorld.getConfig(CONFIG_GM_LEVEL_IN_GM_LIST))) &&
             (!m_session || itr->second->IsVisibleGloballyFor(m_session->GetPlayer())))
         {
             if(first)
@@ -200,14 +200,14 @@ bool ChatHandler::HandleAccountPasswordCommand(const char* args)
         return false;
     }
 
-    if (!accmgr.CheckPassword (m_session->GetAccountId(), password_old))
+    if (!sAccountMgr.CheckPassword (m_session->GetAccountId(), password_old))
     {
         SendSysMessage (LANG_COMMAND_WRONGOLDPASSWORD);
         SetSentErrorMessage (true);
         return false;
     }
 
-    AccountOpResult result = accmgr.ChangePassword(m_session->GetAccountId(), password_new);
+    AccountOpResult result = sAccountMgr.ChangePassword(m_session->GetAccountId(), password_new);
 
     switch(result)
     {

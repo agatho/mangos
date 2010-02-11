@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,13 +26,14 @@
 #include "Language.h"
 #include "Util.h"
 #include "WorldPacket.h"
+#include "MapManager.h"
 
 BattleGroundAB::BattleGroundAB()
 {
     m_BuffChange = true;
     m_BgObjects.resize(BG_AB_OBJECT_MAX);
 
-    m_StartMessageIds[BG_STARTING_EVENT_FIRST]  = LANG_BG_AB_START_TWO_MINUTES;
+    m_StartMessageIds[BG_STARTING_EVENT_FIRST]  = 0;
     m_StartMessageIds[BG_STARTING_EVENT_SECOND] = LANG_BG_AB_START_ONE_MINUTE;
     m_StartMessageIds[BG_STARTING_EVENT_THIRD]  = LANG_BG_AB_START_HALF_MINUTE;
     m_StartMessageIds[BG_STARTING_EVENT_FOURTH] = LANG_BG_AB_HAS_BEGUN;
@@ -84,12 +85,12 @@ void BattleGroundAB::Update(uint32 diff)
 
                     if (teamIndex == 0)
                     {
-                        SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_ALLIANCE,NULL,LANG_BG_AB_ALLY,_GetNodeNameId(node));
+                        SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_ALLIANCE,NULL,LANG_BG_ALLY,_GetNodeNameId(node));
                         PlaySoundToAll(BG_AB_SOUND_NODE_CAPTURED_ALLIANCE);
                     }
                     else
                     {
-                        SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_HORDE,NULL,LANG_BG_AB_HORDE,_GetNodeNameId(node));
+                        SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_HORDE,NULL,LANG_BG_HORDE,_GetNodeNameId(node));
                         PlaySoundToAll(BG_AB_SOUND_NODE_CAPTURED_HORDE);
                     }
                 }
@@ -362,9 +363,9 @@ void BattleGroundAB::EventPlayerClickedOnFlag(Player *source, GameObject* target
         m_NodeTimers[node] = BG_AB_FLAG_CAPTURING_TIME;
 
         if (teamIndex == 0)
-            SendMessage2ToAll(LANG_BG_AB_NODE_CLAIMED,CHAT_MSG_BG_SYSTEM_ALLIANCE, source, _GetNodeNameId(node), LANG_BG_AB_ALLY);
+            SendMessage2ToAll(LANG_BG_AB_NODE_CLAIMED,CHAT_MSG_BG_SYSTEM_ALLIANCE, source, _GetNodeNameId(node), LANG_BG_ALLY);
         else
-            SendMessage2ToAll(LANG_BG_AB_NODE_CLAIMED,CHAT_MSG_BG_SYSTEM_HORDE, source, _GetNodeNameId(node), LANG_BG_AB_HORDE);
+            SendMessage2ToAll(LANG_BG_AB_NODE_CLAIMED,CHAT_MSG_BG_SYSTEM_HORDE, source, _GetNodeNameId(node), LANG_BG_HORDE);
 
         sound = BG_AB_SOUND_NODE_CLAIMED;
     }
@@ -429,9 +430,9 @@ void BattleGroundAB::EventPlayerClickedOnFlag(Player *source, GameObject* target
     if (m_Nodes[node] >= BG_AB_NODE_TYPE_OCCUPIED)
     {
         if (teamIndex == BG_TEAM_ALLIANCE)
-            SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_ALLIANCE, NULL, LANG_BG_AB_ALLY, _GetNodeNameId(node));
+            SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_ALLIANCE, NULL, LANG_BG_ALLY, _GetNodeNameId(node));
         else
-            SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_HORDE, NULL, LANG_BG_AB_HORDE, _GetNodeNameId(node));
+            SendMessage2ToAll(LANG_BG_AB_NODE_TAKEN,CHAT_MSG_BG_SYSTEM_HORDE, NULL, LANG_BG_HORDE, _GetNodeNameId(node));
     }
     PlaySoundToAll(sound);
 }
@@ -456,7 +457,7 @@ void BattleGroundAB::Reset()
     //call parent's class reset
     BattleGround::Reset();
 
-    for (uint8 i = 0; i <= BG_TEAMS_COUNT; ++i)
+    for (uint8 i = 0; i < BG_TEAMS_COUNT; ++i)
     {
         m_TeamScores[i]          = 0;
         m_lastTick[i]            = 0;
